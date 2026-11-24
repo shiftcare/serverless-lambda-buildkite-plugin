@@ -53,6 +53,15 @@ out="dist/${SERVICE}.zip"
 # dist/ itself may hold the service's own build output.
 rm -f -- "$out"
 
+# Serverless v2 loads .env.<stage>, or else .env, from this directory into its
+# own environment, which could hand it AWS credentials after the scrub above.
+# Refuse both before any Serverless command runs.
+for dotenv in ".env.${PACKAGE_STAGE}" .env; do
+  if [ -e "$dotenv" ] || [ -L "$dotenv" ]; then
+    fail "${dotenv} exists in the service root; Serverless would load it at package time (remove it from the checkout)"
+  fi
+done
+
 npm ci
 
 # Only the lockfile-pinned, service-local Serverless: `npx --no-install` can
@@ -92,7 +101,11 @@ esac
 # Also refuse our own output path, in case a previous artifact still got in.
 forbidden="(^|/)\\.serverless/|(^|/)\\.env(/|\$)|(^|/)\\.env\\.|cloudformation-template-.*\\.json\$|serverless-state\\.json\$|^dist/${SERVICE}\\.zip\$"
 entries="$(unzip -Z1 "$zip_path")" || fail "cannot list ${zip_path}"
-bad="$(printf '%s\n' "$entries" | grep -E "$forbidden" || true)"
+# grep exits 1 when nothing matches; anything above 1 means the scan itself
+# failed, and the zip must not ship unscanned.
+scan_rc=0
+bad="$(printf '%s\n' "$entries" | grep -E "$forbidden")" || scan_rc=$?
+[ "$scan_rc" -le 1 ] || fail "forbidden-entry scan of ${zip_path} failed (grep exit ${scan_rc})"
 if [ -n "$bad" ]; then
   printf '%s\n' "$bad" >&2
   fail "${zip_path} contains forbidden entries (listed above)"

@@ -95,7 +95,10 @@ Buildkite UI.
    therefore have no credential source. Then it exports `AWS_ACCOUNT_ID` (the
    placeholder) and `SECRETS_PROVIDER_MODE=placeholder`.
 2. Deletes a previous `dist/<SERVICE>.zip` (only that file), so Serverless
-   cannot package an old artifact into the new one.
+   cannot package an old artifact into the new one. Refuses to continue if
+   `.env.<PACKAGE_STAGE>` or `.env` exists in the service root: Serverless v2
+   loads that file into its own environment, which could hand it AWS
+   credentials.
 3. Runs `npm ci`, then the lockfile-pinned, service-local Serverless at
    `node_modules/.bin/serverless`. A global install is never used: the build
    fails if `npm ci` installed no local Serverless, and unless it is major
@@ -105,7 +108,8 @@ Buildkite UI.
 5. Refuses the zip if it contains `.serverless/`, `.env` (a file, or anything
    under a `.env/` directory), `.env.*`,
    `cloudformation-template-*.json`, `serverless-state.json` or
-   `dist/<SERVICE>.zip`.
+   `dist/<SERVICE>.zip`. If that scan itself fails, packaging stops rather
+   than shipping an unscanned zip.
 6. Copies the zip to `dist/<SERVICE>.zip` and adds `ci.build.info.txt` at its
    root. That file records the build number, commit, branch, Node and
    Serverless versions, and the UTC build time.

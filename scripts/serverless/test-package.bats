@@ -6,6 +6,14 @@ setup() {
   setup_stubs
   stub_buildkite_agent
   stub node 'echo v22.11.0'
+  # grep wrapper: FAKE_GREP_FAIL=1 makes the forbidden-entry scan (grep -E)
+  # exit 2, as a matcher error would; every other call runs the real grep.
+  REAL_GREP="$(type -P grep)"
+  export REAL_GREP
+  # shellcheck disable=SC2016  # stub bodies expand at stub run time
+  stub grep '
+if [ "${FAKE_GREP_FAIL:-}" = 1 ] && [ "${1:-}" = "-E" ]; then exit 2; fi
+exec "$REAL_GREP" "$@"'
   # A decoy global serverless: package.sh must never fall back to it.
   # shellcheck disable=SC2016  # stub bodies expand at stub run time
   stub serverless '
@@ -169,6 +177,31 @@ package() {
   [[ "$output" != *"dist/demo.zip"* ]]
   [[ "$output" == *"dist/service-build-output.js"* ]]
   [ -f "${SVC}/dist/service-build-output.js" ]
+}
+
+@test "refuses to package when .env exists in the service root" {
+  echo "AWS_ACCESS_KEY_ID=from-dotenv" >"${SVC}/.env"
+  package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *".env exists in the service root"* ]]
+  [ ! -f "${STUB_LOG}/npm.log" ]
+  [ ! -f "${STUB_LOG}/sls.log" ]
+}
+
+@test "refuses to package when .env.<PACKAGE_STAGE> exists in the service root" {
+  echo "AWS_ACCESS_KEY_ID=from-dotenv" >"${SVC}/.env.qa"
+  PACKAGE_STAGE=qa package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *".env.qa exists in the service root"* ]]
+  [ ! -f "${STUB_LOG}/sls.log" ]
+}
+
+@test "a failing forbidden-entry scan stops packaging" {
+  FAKE_GREP_FAIL=1 package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"forbidden-entry scan"*"failed (grep exit 2)"* ]]
+  [ ! -f "${STUB_LOG}/buildkite-agent.log" ]
+  [ ! -e "${SVC}/dist/demo.zip" ]
 }
 
 @test "refuses a zip that contains its own output path" {
