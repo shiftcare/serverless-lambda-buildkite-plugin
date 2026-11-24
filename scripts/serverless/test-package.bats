@@ -6,15 +6,26 @@ setup() {
   setup_stubs
   stub_buildkite_agent
   stub node 'echo v22.11.0'
+  # A decoy global serverless: package.sh must never fall back to it.
   # shellcheck disable=SC2016  # stub bodies expand at stub run time
+  stub serverless '
+echo "$*" >>"$STUB_LOG/global-sls.log"
+printf "Framework Core: 2.72.3 (global)\n"'
+  # npm ci installs the service-local serverless (below) into node_modules/.bin,
+  # unless NO_LOCAL_SLS=1.
+  # shellcheck disable=SC2016
   stub npm '
 echo "$*" >>"$STUB_LOG/npm.log"
-exit "${NPM_STUB_EXIT:-0}"'
+[ "${NPM_STUB_EXIT:-0}" = 0 ] || exit "$NPM_STUB_EXIT"
+if [ "$1" = ci ] && [ "${NO_LOCAL_SLS:-}" != 1 ]; then
+  mkdir -p node_modules/.bin
+  cp "$STUB_LOG/local-serverless" node_modules/.bin/serverless
+  chmod +x node_modules/.bin/serverless
+fi'
   # shellcheck disable=SC2016
-  stub npx '
-echo "$*" >>"$STUB_LOG/npx.log"
-[ "$1" = "--no-install" ] && [ "$2" = "serverless" ] || exit 64
-case "$3" in
+  printf '#!/usr/bin/env bash\nset -euo pipefail\n%s\n' '
+echo "$*" >>"$STUB_LOG/sls.log"
+case "$1" in
   --version)
     printf "Framework Core: %s (local)\nPlugin: 5.5.4\nSDK: 4.3.2\n" "${FAKE_SLS_VERSION:-2.72.3}"
     ;;
@@ -32,11 +43,13 @@ case "$3" in
       dotenv-dir) mkdir -p "$src/config/.env"; echo "X=1" >"$src/config/.env/secret" ;;
       cfn) echo "{}" >"$src/cloudformation-template-update-stack.json" ;;
     esac
+    # Like Serverless, include whatever already sits under dist/ in the service.
+    [ ! -d dist ] || cp -R dist "$src/"
     (cd "$src" && zip -qr "$OLDPWD/.serverless/demo.zip" .)
     [ "${FAKE_ZIP_MODE:-ok}" != two ] || cp .serverless/demo.zip .serverless/other.zip
     exit "${SLS_STUB_EXIT:-0}"
     ;;
-esac'
+esac' >"$STUB_LOG/local-serverless"
 
   SVC="${BATS_TEST_TMPDIR}/svc"
   mkdir -p "$SVC"
@@ -52,6 +65,9 @@ esac'
   export AWS_SESSION_TOKEN=stub-session
   export AWS_PROFILE=stub-claude
   export AWS_REGION=stub-region
+  export AMAZON_ACCESS_KEY_ID=stub-legacy-id
+  export AMAZON_SECRET_ACCESS_KEY=stub-legacy-key
+  export AMAZON_SESSION_TOKEN=stub-legacy-session
 }
 
 package() {
@@ -70,19 +86,19 @@ package() {
   package
   [ "$status" -eq 0 ]
   [ "$(cat "${STUB_LOG}/npm.log")" = "ci" ]
-  grep -qx -- "--no-install serverless package --stage dev" "${STUB_LOG}/npx.log"
+  grep -qx -- "package --stage dev" "${STUB_LOG}/sls.log"
 }
 
 @test "honours PACKAGE_STAGE" {
   PACKAGE_STAGE=qa package
   [ "$status" -eq 0 ]
-  grep -qx -- "--no-install serverless package --stage qa" "${STUB_LOG}/npx.log"
+  grep -qx -- "package --stage qa" "${STUB_LOG}/sls.log"
 }
 
 @test "passes PACKAGE_REGION as --region" {
   PACKAGE_REGION=ap-southeast-2 package
   [ "$status" -eq 0 ]
-  grep -qx -- "--no-install serverless package --stage dev --region ap-southeast-2" "${STUB_LOG}/npx.log"
+  grep -qx -- "package --stage dev --region ap-southeast-2" "${STUB_LOG}/sls.log"
 }
 
 @test "rejects an invalid PACKAGE_REGION" {
@@ -117,6 +133,40 @@ package() {
   [ -n "$sls_home" ]
   [ "$sls_home" != "$HOME" ]
   [ ! -e "$sls_home" ]
+}
+
+@test "strips legacy AMAZON_* credentials (AWS SDK v2) before serverless runs" {
+  package
+  [ "$status" -eq 0 ]
+  run grep -E '^AMAZON_' "${STUB_LOG}/package-env"
+  [ "$status" -eq 1 ]
+}
+
+@test "runs the service-local serverless, never a global one" {
+  package
+  [ "$status" -eq 0 ]
+  [ -f "${STUB_LOG}/sls.log" ]
+  [ ! -f "${STUB_LOG}/global-sls.log" ]
+}
+
+@test "fails when npm ci installs no local serverless, even with a global one" {
+  NO_LOCAL_SLS=1 package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not installed locally"* ]]
+  [ ! -f "${STUB_LOG}/global-sls.log" ]
+  [ ! -f "${STUB_LOG}/buildkite-agent.log" ]
+}
+
+@test "a previous dist/<SERVICE>.zip is not packaged into the new zip" {
+  mkdir -p "${SVC}/dist"
+  echo "stale" >"${SVC}/dist/demo.zip"
+  echo "keep" >"${SVC}/dist/service-build-output.js"
+  package
+  [ "$status" -eq 0 ]
+  run unzip -Z1 "${SVC}/dist/demo.zip"
+  [[ "$output" != *"dist/demo.zip"* ]]
+  [[ "$output" == *"dist/service-build-output.js"* ]]
+  [ -f "${SVC}/dist/service-build-output.js" ]
 }
 
 @test "PACKAGE_AWS_ACCOUNT_ID overrides the placeholder" {
@@ -209,7 +259,7 @@ package() {
   FAKE_SLS_VERSION=3.38.0 package
   [ "$status" -eq 1 ]
   [[ "$output" == *"only major version 2"* ]]
-  run grep -c ' package ' "${STUB_LOG}/npx.log"
+  run grep -c '^package ' "${STUB_LOG}/sls.log"
   [ "$output" = "0" ]
 }
 
@@ -221,7 +271,7 @@ package() {
 @test "a failing npm ci propagates" {
   NPM_STUB_EXIT=3 package
   [ "$status" -ne 0 ]
-  [ ! -f "${STUB_LOG}/npx.log" ]
+  [ ! -f "${STUB_LOG}/sls.log" ]
 }
 
 @test "a failing serverless package propagates" {

@@ -56,7 +56,7 @@ Set these in the bootstrap step's `env`:
 | `PACKAGE_REGION` | empty | Value for `serverless package --region`. Required when `serverless.yml` has no `provider.region`: `AWS_REGION` is stripped while packaging, and Serverless v2 then resolves `${aws:region}` to `us-east-1`. |
 | `PACKAGE_QUEUE` | `tiny` | Agent queue for the package step. |
 | `PACKAGE_AWS_ACCOUNT_ID` | `000000000000` | Exported as `AWS_ACCOUNT_ID` while packaging. |
-| `PACKAGE_ENV_PASSTHROUGH` | empty | Space- or comma-separated names of other bootstrap-step variables to copy into the package step's `env`. Each must be set, match `^[A-Z][A-Z0-9_]*$`, have a single-line value, and not be reserved (`AWS_*`, `BUILDKITE*`, `BK_*`, `PACKAGE_*`, `PIPELINE_*`, `LD_*`, `DYLD_*`, `SERVICE`, `SECRETS_PROVIDER_MODE`, `PATH`, `HOME`, `SHELL`, `IFS`, `ENV`, `BASH_ENV`, `NODE_OPTIONS`). **Never list a secret**: values are written into the generated pipeline YAML and are visible in the Buildkite UI. |
+| `PACKAGE_ENV_PASSTHROUGH` | empty | Space- or comma-separated names of other bootstrap-step variables to copy into the package step's `env`. Each must be set, match `^[A-Z][A-Z0-9_]*$`, have a single-line value, and not be reserved (`AWS_*`, `AMAZON_*`, `BUILDKITE*`, `BK_*`, `PACKAGE_*`, `PIPELINE_*`, `LD_*`, `DYLD_*`, `SERVICE`, `SECRETS_PROVIDER_MODE`, `PATH`, `HOME`, `SHELL`, `IFS`, `ENV`, `BASH_ENV`, `NODE_OPTIONS`). **Never list a secret**: values are written into the generated pipeline YAML and are visible in the Buildkite UI. |
 
 Local and test switches:
 
@@ -87,27 +87,32 @@ Buildkite UI.
 
 `scripts/serverless/package.sh` runs in the service checkout and:
 
-1. Unsets every `AWS_*` environment variable and sets
+1. Unsets every `AWS_*` and `AMAZON_*` environment variable (AWS SDK v2 still
+   reads the legacy `AMAZON_*` credential names) and sets
    `AWS_EC2_METADATA_DISABLED=true`, which tells the AWS SDKs not to use the
    instance metadata service (IMDS). It runs Serverless with an empty scratch
    `HOME`, so no `~/.aws` files exist for it. The SDKs Serverless uses
    therefore have no credential source. Then it exports `AWS_ACCOUNT_ID` (the
    placeholder) and `SECRETS_PROVIDER_MODE=placeholder`.
-2. Runs `npm ci`, then the lockfile-pinned Serverless with
-   `npx --no-install serverless`. There is never a global install. The build
-   fails unless Serverless is major version 2.
-3. Expects exactly one `.serverless/*.zip`. Individually packaged functions are
+2. Deletes a previous `dist/<SERVICE>.zip` (only that file), so Serverless
+   cannot package an old artifact into the new one.
+3. Runs `npm ci`, then the lockfile-pinned, service-local Serverless at
+   `node_modules/.bin/serverless`. A global install is never used: the build
+   fails if `npm ci` installed no local Serverless, and unless it is major
+   version 2.
+4. Expects exactly one `.serverless/*.zip`. Individually packaged functions are
    not supported.
-4. Refuses the zip if it contains `.serverless/`, `.env` (a file, or anything
+5. Refuses the zip if it contains `.serverless/`, `.env` (a file, or anything
    under a `.env/` directory), `.env.*`,
-   `cloudformation-template-*.json` or `serverless-state.json`.
-5. Copies the zip to `dist/<SERVICE>.zip` and adds `ci.build.info.txt` at its
+   `cloudformation-template-*.json`, `serverless-state.json` or
+   `dist/<SERVICE>.zip`.
+6. Copies the zip to `dist/<SERVICE>.zip` and adds `ci.build.info.txt` at its
    root. That file records the build number, commit, branch, Node and
    Serverless versions, and the UTC build time.
-6. Uploads only `dist/<SERVICE>.zip` as a build artifact.
+7. Uploads only `dist/<SERVICE>.zip` as a build artifact.
 
-No Docker and no Docker Hub are involved. Agents need Node 22 with npm and npx
-on `PATH`, plus `zip`, `unzip` and `yq` v4.
+No Docker and no Docker Hub are involved. Agents need Node 22 with npm on
+`PATH`, plus `zip`, `unzip` and `yq` v4.
 
 **Limits.** This removes credentials from the SDKs; it is not a sandbox.
 `AWS_EC2_METADATA_DISABLED` does not block the network path to IMDS, so code

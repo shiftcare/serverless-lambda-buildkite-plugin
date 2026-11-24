@@ -12,12 +12,13 @@ fail() {
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 
-# Leave the AWS SDKs no credential source: no AWS_* env vars, no IMDS lookup
-# (AWS_EC2_METADATA_DISABLED only stops the SDKs; it does not block IMDS), and
-# no ~/.aws (Serverless runs with an empty HOME below).
+# Leave the AWS SDKs no credential source: no AWS_* env vars, no AMAZON_* ones
+# (AWS SDK v2 still reads legacy AMAZON_ACCESS_KEY_ID and friends), no IMDS
+# lookup (AWS_EC2_METADATA_DISABLED only stops the SDKs; it does not block
+# IMDS), and no ~/.aws (Serverless runs with an empty HOME below).
 while IFS= read -r name; do
   case "$name" in
-    AWS_*) unset "$name" ;;
+    AWS_* | AMAZON_*) unset "$name" ;;
   esac
 done < <(compgen -e)
 export AWS_EC2_METADATA_DISABLED=true
@@ -42,19 +43,30 @@ if [ -n "$PACKAGE_REGION" ]; then
   region_args=(--region "$PACKAGE_REGION")
 fi
 
-for tool in node npm npx unzip zip; do
+for tool in node npm unzip zip; do
   command -v "$tool" >/dev/null 2>&1 || fail "required tool not found: ${tool}"
 done
 
+out="dist/${SERVICE}.zip"
+# A previous run's output would otherwise be picked up by Serverless's default
+# file selection and packaged into the new zip. Only this file is removed:
+# dist/ itself may hold the service's own build output.
+rm -f -- "$out"
+
 npm ci
 
+# Only the lockfile-pinned, service-local Serverless: `npx --no-install` can
+# fall back to a global install with a different version.
+sls_bin="${PWD}/node_modules/.bin/serverless"
+[ -x "$sls_bin" ] ||
+  fail "serverless is not installed locally after npm ci (add it to devDependencies)"
 sls() {
-  HOME="$sls_home" npx --no-install serverless "$@"
+  HOME="$sls_home" "$sls_bin" "$@"
 }
 
 node_version="$(node --version)"
 sls_output="$(sls --version)" ||
-  fail "serverless is not installed locally (add it to devDependencies)"
+  fail "local serverless failed to report its version"
 sls_version="$(printf '%s\n' "$sls_output" |
   sed -n -E 's/.*Framework Core: v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n 1)"
 if [ -z "$sls_version" ]; then
@@ -77,7 +89,8 @@ case "${#zips[@]}" in
 esac
 
 # Resolved config can carry secrets; none of it may ship in the code zip.
-forbidden='(^|/)\.serverless/|(^|/)\.env(/|$)|(^|/)\.env\.|cloudformation-template-.*\.json$|serverless-state\.json$'
+# Also refuse our own output path, in case a previous artifact still got in.
+forbidden="(^|/)\\.serverless/|(^|/)\\.env(/|\$)|(^|/)\\.env\\.|cloudformation-template-.*\\.json\$|serverless-state\\.json\$|^dist/${SERVICE}\\.zip\$"
 entries="$(unzip -Z1 "$zip_path")" || fail "cannot list ${zip_path}"
 bad="$(printf '%s\n' "$entries" | grep -E "$forbidden" || true)"
 if [ -n "$bad" ]; then
@@ -96,7 +109,6 @@ stamp="${work}/ci.build.info.txt"
   echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >"$stamp"
 
-out="dist/${SERVICE}.zip"
 mkdir -p dist
 cp "$zip_path" "$out"
 zip -q -j "$out" "$stamp"

@@ -39,7 +39,7 @@ IFS=$' \t\n' read -r -d '' -a passthrough <<<"${passthrough_list//,/ }" || true
 for name in ${passthrough[@]+"${passthrough[@]}"}; do
   check "PACKAGE_ENV_PASSTHROUGH entry" "$name" '^[A-Z][A-Z0-9_]*$'
   case "$name" in
-    AWS_* | BUILDKITE* | BK_* | PACKAGE_* | PIPELINE_* | LD_* | DYLD_* | \
+    AWS_* | AMAZON_* | BUILDKITE* | BK_* | PACKAGE_* | PIPELINE_* | LD_* | DYLD_* | \
       SERVICE | SECRETS_PROVIDER_MODE | PATH | HOME | SHELL | IFS | ENV | BASH_ENV | NODE_OPTIONS)
       fail "PACKAGE_ENV_PASSTHROUGH: ${name} is reserved"
       ;;
