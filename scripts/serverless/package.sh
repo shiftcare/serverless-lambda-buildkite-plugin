@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Packages the service in the current directory with Serverless v2 and uploads
-# exactly one artifact: dist/<SERVICE>.zip. Packaging runs with no AWS
-# credentials of any kind.
+# exactly one artifact: dist/<SERVICE>.zip. Serverless runs with no AWS
+# credential source; see README for what this does not cover.
 set -euo pipefail
 
 fail() {
@@ -12,9 +12,9 @@ fail() {
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 
-# Strip every AWS credential source before anything else runs: all AWS_* env
-# vars, the agent's instance profile (IMDS), and ~/.aws (Serverless runs with
-# an empty HOME below).
+# Leave the AWS SDKs no credential source: no AWS_* env vars, no IMDS lookup
+# (AWS_EC2_METADATA_DISABLED only stops the SDKs; it does not block IMDS), and
+# no ~/.aws (Serverless runs with an empty HOME below).
 while IFS= read -r name; do
   case "$name" in
     AWS_*) unset "$name" ;;

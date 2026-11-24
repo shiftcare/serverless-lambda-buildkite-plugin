@@ -7,8 +7,9 @@ pipeline from `templates/` and uploads it.
 
 Current steps:
 
-- **package**: Serverless v2 `package` with no AWS access. Uploads one build
-  artifact, `dist/<SERVICE>.zip`.
+- **package**: Serverless v2 `package` with no AWS credentials available to
+  Serverless (see [limits](#how-packaging-withholds-aws-credentials)).
+  Uploads one build artifact, `dist/<SERVICE>.zip`.
 
 Publish and deploy steps come in follow-up releases. Their extension points
 are marked in `scripts/serverless/generate.sh`.
@@ -56,23 +57,25 @@ Local and test switches:
 
 ### Service contract
 
-Packaging never reads from AWS, so each service must build without it. Two
-changes are needed per service before migrating:
+Serverless has no AWS credentials while packaging, so any AWS read during
+variable resolution fails and each service must build without one. Two changes
+are needed per service before migrating:
 
 1. `serverless.yml`: `provider.role` (and anything else that needs the account
    ID) uses `${env:AWS_ACCOUNT_ID, aws:accountId}`.
 2. `secretsprovider.js`: when `SECRETS_PROVIDER_MODE=placeholder`, return
    placeholder values and make no AWS calls.
 
-## How packaging stays AWS-free
+## How packaging withholds AWS credentials
 
 `scripts/serverless/package.sh` runs in the service checkout and:
 
 1. Unsets every `AWS_*` environment variable and sets
-   `AWS_EC2_METADATA_DISABLED=true`, which blocks the agent's instance
-   profile. It runs Serverless with an empty scratch `HOME`, so no `~/.aws`
-   files exist for it. Then it exports `AWS_ACCOUNT_ID` (the placeholder) and
-   `SECRETS_PROVIDER_MODE=placeholder`.
+   `AWS_EC2_METADATA_DISABLED=true`, which tells the AWS SDKs not to use the
+   instance metadata service (IMDS). It runs Serverless with an empty scratch
+   `HOME`, so no `~/.aws` files exist for it. The SDKs Serverless uses
+   therefore have no credential source. Then it exports `AWS_ACCOUNT_ID` (the
+   placeholder) and `SECRETS_PROVIDER_MODE=placeholder`.
 2. Runs `npm ci`, then the lockfile-pinned Serverless with
    `npx --no-install serverless`. There is never a global install. The build
    fails unless Serverless is major version 2.
@@ -85,8 +88,17 @@ changes are needed per service before migrating:
    Serverless versions, and the UTC build time.
 6. Uploads only `dist/<SERVICE>.zip` as a build artifact.
 
-No Docker, no Docker Hub and no AWS credentials are involved. Agents need
-Node 22 with npm and npx on `PATH`, plus `zip`, `unzip` and `yq` v4.
+No Docker and no Docker Hub are involved. Agents need Node 22 with npm and npx
+on `PATH`, plus `zip`, `unzip` and `yq` v4.
+
+**Limits.** This removes credentials from the SDKs; it is not a sandbox.
+`AWS_EC2_METADATA_DISABLED` does not block the network path to IMDS, so code
+that runs during packaging (npm lifecycle scripts in `npm ci`, Serverless
+plugins, JS variable files) can still fetch the agent's instance-profile
+credentials directly. `npm ci` also runs with the real `HOME`, for registry
+auth and cache. Real isolation needs the package queue's agents to have no
+useful instance profile, or IMDS blocked to build processes. That is agent
+infrastructure, outside this repo.
 
 ### How the generated pipeline runs
 
