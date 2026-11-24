@@ -166,10 +166,11 @@ The scripts target bash 3.2 (macOS) as well as Linux. Each script under
 
 ## Repo CI
 
-`.buildkite/pipeline.yml` runs shellcheck, the bats suite and the leak check
-on queue `tiny`. Agents need `shellcheck`, `bats`, `yq` v4, `git`, `zip` and
-`unzip`. The Buildkite pipeline is created by hand in the Buildkite UI, using
-the default `buildkite-agent pipeline upload` step.
+GitHub Actions (`.github/workflows/ci.yml`) runs shellcheck, the bats suite and
+the leak check on every pull request and on pushes to `main`, on a stock
+`ubuntu-latest` runner (shellcheck, `yq` v4, `zip` and `unzip` come with the
+image; bats is installed with apt). The tests stub `buildkite-agent`, so no
+Buildkite agent or pipeline is needed for this repo's own CI.
 
 Leak-check false positives: add `<path>:<fixed string>` to `.leak-allowlist`.
 Hits in that file on lines containing that string are then ignored. Review
