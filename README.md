@@ -47,6 +47,7 @@ Set these in the bootstrap step's `env`:
 | `PACKAGE_STAGE` | `dev` | Value for `serverless package --stage`. |
 | `PACKAGE_QUEUE` | `tiny` | Agent queue for the package step. |
 | `PACKAGE_AWS_ACCOUNT_ID` | `000000000000` | Exported as `AWS_ACCOUNT_ID` while packaging. |
+| `PACKAGE_ENV_PASSTHROUGH` | empty | Space- or comma-separated names of other bootstrap-step variables to copy into the package step's `env`. Each must be set, match `^[A-Z][A-Z0-9_]*$`, have a single-line value, and not be reserved (`AWS_*`, `BUILDKITE*`, `BK_*`, `PACKAGE_*`, `PIPELINE_*`, `LD_*`, `DYLD_*`, `SERVICE`, `SECRETS_PROVIDER_MODE`, `PATH`, `HOME`, `SHELL`, `IFS`, `ENV`, `BASH_ENV`, `NODE_OPTIONS`). **Never list a secret**: values are written into the generated pipeline YAML and are visible in the Buildkite UI. |
 
 Local and test switches:
 
@@ -65,6 +66,13 @@ are needed per service before migrating:
    ID) uses `${env:AWS_ACCOUNT_ID, aws:accountId}`.
 2. `secretsprovider.js`: when `SECRETS_PROVIDER_MODE=placeholder`, return
    placeholder values and make no AWS calls.
+
+Buildkite does not pass the bootstrap step's `env` on to the steps it uploads.
+If `serverless.yml` reads other `${env:...}` values at package time, set them
+in the bootstrap step's `env` and list their names in
+`PACKAGE_ENV_PASSTHROUGH`. Only non-secret values: they appear in the
+generated pipeline YAML, which anyone with access to the build can read in the
+Buildkite UI.
 
 ## How packaging withholds AWS credentials
 

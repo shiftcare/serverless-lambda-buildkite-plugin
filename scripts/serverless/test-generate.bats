@@ -9,7 +9,7 @@ setup() {
   mkdir -p "$PIPELINE_WORKDIR"
   printf 'steps: []\n' >"$PIPELINE_FILE"
   export SERVICE=demo-svc
-  unset PACKAGE_STAGE PACKAGE_QUEUE PACKAGE_AWS_ACCOUNT_ID
+  unset PACKAGE_STAGE PACKAGE_QUEUE PACKAGE_AWS_ACCOUNT_ID PACKAGE_ENV_PASSTHROUGH
 }
 
 generate() {
@@ -92,6 +92,54 @@ step() {
     printf 'steps: []\n' >"$PIPELINE_FILE"
     run env "$spec" "${REPO_ROOT}/scripts/serverless/generate.sh"
     [ "$status" -eq 1 ] || { echo "accepted ${spec}"; return 1; }
+    [ "$(step '.steps | length')" = "0" ]
+  done
+}
+
+@test "copies PACKAGE_ENV_PASSTHROUGH variables into the package step env" {
+  FOO_ENDPOINT=https://api.example.com BAR=123 EMPTY_ONE='' \
+    PACKAGE_ENV_PASSTHROUGH='FOO_ENDPOINT, BAR,EMPTY_ONE' generate
+  [ "$status" -eq 0 ]
+  [ "$(step '.steps[0].env.FOO_ENDPOINT')" = "https://api.example.com" ]
+  [ "$(step '.steps[0].env.BAR')" = "123" ]
+  [ "$(step '.steps[0].env.BAR | tag')" = '!!str' ]
+  [ "$(step '.steps[0].env.EMPTY_ONE')" = "" ]
+  [ "$(step '.steps[0].env.SERVICE')" = "demo-svc" ]
+}
+
+@test "passes a hostile PACKAGE_ENV_PASSTHROUGH value verbatim" {
+  # shellcheck disable=SC2016  # literal value under test
+  local v='x" }, steps: [{command: evil}] # $(id) ${HOME} @@SERVICE@@ '\''q'\'' *'
+  HOSTILE="$v" PACKAGE_ENV_PASSTHROUGH=HOSTILE generate
+  [ "$status" -eq 0 ]
+  [ "$(step '.steps | length')" = "1" ]
+  [ "$(step '.steps[0].env.HOSTILE')" = "$v" ]
+  [ "$(step '.steps[0].env | keys | length')" = "4" ]
+}
+
+@test "an empty PACKAGE_ENV_PASSTHROUGH changes nothing" {
+  generate
+  [ "$status" -eq 0 ]
+  local before
+  before="$(cat "$PIPELINE_FILE")"
+  printf 'steps: []\n' >"$PIPELINE_FILE"
+  PACKAGE_ENV_PASSTHROUGH=' , ' generate
+  [ "$status" -eq 0 ]
+  [ "$(cat "$PIPELINE_FILE")" = "$before" ]
+}
+
+@test "rejects reserved, unset, malformed and multi-line PACKAGE_ENV_PASSTHROUGH entries" {
+  local spec
+  # shellcheck disable=SC2016  # literal name under test
+  for spec in AWS_SECRET_ACCESS_KEY AWS_REGION BUILDKITE_AGENT_ACCESS_TOKEN BK_X \
+    SERVICE PACKAGE_STAGE SECRETS_PROVIDER_MODE PATH HOME NODE_OPTIONS \
+    NOT_SET_ANYWHERE lower_case 1ABC 'A-B' 'X[$(id)]' MULTI; do
+    printf 'steps: []\n' >"$PIPELINE_FILE"
+    run env -u NOT_SET_ANYWHERE MULTI=$'a\nb' AWS_SECRET_ACCESS_KEY=k AWS_REGION=r \
+      BUILDKITE_AGENT_ACCESS_TOKEN=t BK_X=x lower_case=v \
+      PACKAGE_ENV_PASSTHROUGH="$spec" "${REPO_ROOT}/scripts/serverless/generate.sh"
+    [ "$status" -eq 1 ] || { echo "accepted ${spec}"; return 1; }
+    [[ "$output" == *PACKAGE_ENV_PASSTHROUGH* ]] || { echo "${spec}: ${output}"; return 1; }
     [ "$(step '.steps | length')" = "0" ]
   done
 }
