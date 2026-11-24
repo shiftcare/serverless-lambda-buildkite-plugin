@@ -1,0 +1,2 @@
+steps:
+  - block: "@@BLOCK_LABEL@@"
