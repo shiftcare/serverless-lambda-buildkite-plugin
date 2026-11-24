@@ -109,6 +109,14 @@ docs.md:example ${ACCOUNT_ID}"
   [[ "$output" != *".leak-allowlist"* ]]
 }
 
+@test "allowlist entry with an empty string suppresses nothing" {
+  put docs.md "example ${ACCOUNT_ID}"
+  put .leak-allowlist "docs.md:"
+  run "$CHECK" "$REPO"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"docs.md:1:"* ]]
+}
+
 @test "runs from a subdirectory of the repo" {
   mkdir -p "${REPO}/sub"
   put a.txt "$ACCOUNT_ID"

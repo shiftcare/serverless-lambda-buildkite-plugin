@@ -38,7 +38,9 @@ printf '%s\n' "$hits" | awk -v allow="$allowlist" '
     while ((getline l < allow) > 0) {
       if (l ~ /^[[:space:]]*(#|$)/) continue
       i = index(l, ":")
-      if (i < 2) continue
+      # Skip entries with no path or an empty string: index(x, "") is 1, so
+      # an empty string would suppress every hit in that path.
+      if (i < 2 || i == length(l)) continue
       n++; apath[n] = substr(l, 1, i - 1); astr[n] = substr(l, i + 1)
     }
     found = 0
