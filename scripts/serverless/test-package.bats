@@ -29,6 +29,7 @@ case "$3" in
       serverless-dir) mkdir -p "$src/.serverless"; echo "{}" >"$src/.serverless/serverless-state.json" ;;
       dotenv) echo "X=1" >"$src/.env" ;;
       dotenv-suffix) echo "X=1" >"$src/.env.production" ;;
+      dotenv-dir) mkdir -p "$src/config/.env"; echo "X=1" >"$src/config/.env/secret" ;;
       cfn) echo "{}" >"$src/cloudformation-template-update-stack.json" ;;
     esac
     (cd "$src" && zip -qr "$OLDPWD/.serverless/demo.zip" .)
@@ -178,6 +179,13 @@ package() {
 @test "refuses a zip containing .env.<suffix>" {
   FAKE_ZIP_MODE=dotenv-suffix package
   [ "$status" -eq 1 ]
+}
+
+@test "refuses a zip containing files under a .env directory" {
+  FAKE_ZIP_MODE=dotenv-dir package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"config/.env/secret"* ]]
+  [ ! -f "${STUB_LOG}/buildkite-agent.log" ]
 }
 
 @test "refuses a zip containing a cloudformation template" {

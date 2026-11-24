@@ -77,7 +77,7 @@ case "${#zips[@]}" in
 esac
 
 # Resolved config can carry secrets; none of it may ship in the code zip.
-forbidden='(^|/)\.serverless/|(^|/)\.env$|(^|/)\.env\.|cloudformation-template-.*\.json$|serverless-state\.json$'
+forbidden='(^|/)\.serverless/|(^|/)\.env(/|$)|(^|/)\.env\.|cloudformation-template-.*\.json$|serverless-state\.json$'
 entries="$(unzip -Z1 "$zip_path")" || fail "cannot list ${zip_path}"
 bad="$(printf '%s\n' "$entries" | grep -E "$forbidden" || true)"
 if [ -n "$bad" ]; then

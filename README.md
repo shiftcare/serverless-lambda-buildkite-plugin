@@ -98,7 +98,8 @@ Buildkite UI.
    fails unless Serverless is major version 2.
 3. Expects exactly one `.serverless/*.zip`. Individually packaged functions are
    not supported.
-4. Refuses the zip if it contains `.serverless/`, `.env`, `.env.*`,
+4. Refuses the zip if it contains `.serverless/`, `.env` (a file, or anything
+   under a `.env/` directory), `.env.*`,
    `cloudformation-template-*.json` or `serverless-state.json`.
 5. Copies the zip to `dist/<SERVICE>.zip` and adds `ci.build.info.txt` at its
    root. That file records the build number, commit, branch, Node and
