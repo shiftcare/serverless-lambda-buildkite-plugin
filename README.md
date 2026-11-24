@@ -30,12 +30,17 @@ steps:
     env:
       SERVICE: "example-service"
     command: |
-      git clone --depth 1 --branch v1.0.0 https://github.com/shiftcare/serverless-lambda-pipeline.git .buildkite-shared
+      git init -q .buildkite-shared
+      git -C .buildkite-shared fetch -q --depth 1 https://github.com/shiftcare/serverless-lambda-pipeline.git refs/tags/v1.0.0
+      git -C .buildkite-shared checkout -q FETCH_HEAD
       .buildkite-shared/generate_pipeline.sh
 ```
 
-Pin a release tag literally. Buildkite interpolates the service repo's own
-`pipeline.yml`, so any `$VAR` added to that snippet must be written `$$VAR`.
+Pin a release tag literally, by its full `refs/tags/` name. Do not use
+`git clone --branch <tag>`: when a branch with the same name exists, clone
+checks out the branch, which the tag ruleset does not protect. Buildkite
+interpolates the service repo's own `pipeline.yml`, so any `$VAR` added to that
+snippet must be written `$$VAR`.
 
 ### Configuration
 
@@ -45,6 +50,7 @@ Set these in the bootstrap step's `env`:
 |---|---|---|
 | `SERVICE` | required | Service name, `^[a-z0-9][a-z0-9-]*$`. Also names the zip: `dist/<SERVICE>.zip`. |
 | `PACKAGE_STAGE` | `dev` | Value for `serverless package --stage`. |
+| `PACKAGE_REGION` | empty | Value for `serverless package --region`. Required when `serverless.yml` has no `provider.region`: `AWS_REGION` is stripped while packaging, and Serverless v2 then resolves `${aws:region}` to `us-east-1`. |
 | `PACKAGE_QUEUE` | `tiny` | Agent queue for the package step. |
 | `PACKAGE_AWS_ACCOUNT_ID` | `000000000000` | Exported as `AWS_ACCOUNT_ID` while packaging. |
 | `PACKAGE_ENV_PASSTHROUGH` | empty | Space- or comma-separated names of other bootstrap-step variables to copy into the package step's `env`. Each must be set, match `^[A-Z][A-Z0-9_]*$`, have a single-line value, and not be reserved (`AWS_*`, `BUILDKITE*`, `BK_*`, `PACKAGE_*`, `PIPELINE_*`, `LD_*`, `DYLD_*`, `SERVICE`, `SECRETS_PROVIDER_MODE`, `PATH`, `HOME`, `SHELL`, `IFS`, `ENV`, `BASH_ENV`, `NODE_OPTIONS`). **Never list a secret**: values are written into the generated pipeline YAML and are visible in the Buildkite UI. |
@@ -170,8 +176,8 @@ every entry, since the allowlist is public too.
 1. Open a PR, get it reviewed, and merge to `main`.
 2. Tag the merge commit `vX.Y.Z` and push the tag. A repository ruleset keeps
    tags immutable.
-3. Service repos move to the new release by changing the pinned `--branch`
-   tag in their bootstrap step.
+3. Service repos move to the new release by changing the pinned
+   `refs/tags/vX.Y.Z` in their bootstrap step.
 
 ## Upcoming: publish key layout
 
