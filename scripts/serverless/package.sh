@@ -53,16 +53,18 @@ out="dist/${SERVICE}.zip"
 # dist/ itself may hold the service's own build output.
 rm -f -- "$out"
 
-# Serverless v2 loads .env.<stage>, or else .env, from this directory into its
-# own environment, which could hand it AWS credentials after the scrub above.
-# Refuse both before any Serverless command runs.
+npm ci
+
+# With useDotenv: true, Serverless v2 loads .env.<stage>, or else .env, from
+# this directory into its own environment at package time, which could hand
+# it AWS credentials after the scrub above. Refuse both whatever useDotenv
+# says. Checked after npm ci (a lifecycle script could create one) and before
+# `sls package`, the first command that reads them.
 for dotenv in ".env.${PACKAGE_STAGE}" .env; do
   if [ -e "$dotenv" ] || [ -L "$dotenv" ]; then
-    fail "${dotenv} exists in the service root; Serverless would load it at package time (remove it from the checkout)"
+    fail "${dotenv} exists in the service root; Serverless can load it at package time (remove it from the checkout)"
   fi
 done
-
-npm ci
 
 # Only the lockfile-pinned, service-local Serverless: `npx --no-install` can
 # fall back to a global install with a different version.

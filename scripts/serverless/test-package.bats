@@ -25,6 +25,7 @@ printf "Framework Core: 2.72.3 (global)\n"'
   stub npm '
 echo "$*" >>"$STUB_LOG/npm.log"
 [ "${NPM_STUB_EXIT:-0}" = 0 ] || exit "$NPM_STUB_EXIT"
+[ "${NPM_CREATES_DOTENV:-}" != 1 ] || echo "X=1" >.env
 if [ "$1" = ci ] && [ "${NO_LOCAL_SLS:-}" != 1 ]; then
   mkdir -p node_modules/.bin
   cp "$STUB_LOG/local-serverless" node_modules/.bin/serverless
@@ -184,8 +185,27 @@ package() {
   package
   [ "$status" -eq 1 ]
   [[ "$output" == *".env exists in the service root"* ]]
-  [ ! -f "${STUB_LOG}/npm.log" ]
   [ ! -f "${STUB_LOG}/sls.log" ]
+}
+
+@test "refuses to package when .env is a dangling symlink" {
+  ln -s /nonexistent/.env "${SVC}/.env"
+  package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *".env exists in the service root"* ]]
+}
+
+@test "refuses a .env created by npm ci (lifecycle scripts)" {
+  NPM_CREATES_DOTENV=1 package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *".env exists in the service root"* ]]
+  [ ! -f "${STUB_LOG}/sls.log" ]
+}
+
+@test "a .env file for another stage does not block packaging" {
+  echo "X=1" >"${SVC}/.env.prod"
+  PACKAGE_STAGE=qa package
+  [ "$status" -eq 0 ]
 }
 
 @test "refuses to package when .env.<PACKAGE_STAGE> exists in the service root" {

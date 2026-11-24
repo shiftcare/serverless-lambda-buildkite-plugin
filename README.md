@@ -95,14 +95,15 @@ Buildkite UI.
    therefore have no credential source. Then it exports `AWS_ACCOUNT_ID` (the
    placeholder) and `SECRETS_PROVIDER_MODE=placeholder`.
 2. Deletes a previous `dist/<SERVICE>.zip` (only that file), so Serverless
-   cannot package an old artifact into the new one. Refuses to continue if
-   `.env.<PACKAGE_STAGE>` or `.env` exists in the service root: Serverless v2
-   loads that file into its own environment, which could hand it AWS
-   credentials.
+   cannot package an old artifact into the new one.
 3. Runs `npm ci`, then the lockfile-pinned, service-local Serverless at
    `node_modules/.bin/serverless`. A global install is never used: the build
    fails if `npm ci` installed no local Serverless, and unless it is major
-   version 2.
+   version 2. After `npm ci` and before packaging, it refuses to continue if
+   `.env.<PACKAGE_STAGE>` or `.env` exists in the service root: with
+   `useDotenv: true`, Serverless v2 loads that file into its own environment,
+   which could hand it AWS credentials. The refusal applies whatever
+   `useDotenv` says.
 4. Expects exactly one `.serverless/*.zip`. Individually packaged functions are
    not supported.
 5. Refuses the zip if it contains `.serverless/`, `.env` (a file, or anything
