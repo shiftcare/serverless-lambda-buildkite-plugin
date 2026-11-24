@@ -1,0 +1,22 @@
+steps:
+  - label: ":package: Package @@SERVICE@@"
+    key: package
+    agents:
+      queue: "@@PACKAGE_QUEUE@@"
+    timeout_in_minutes: 20
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+        - exit_status: 255
+          limit: 2
+    env:
+      SERVICE: "@@SERVICE@@"
+      PACKAGE_STAGE: "@@PACKAGE_STAGE@@"
+      PACKAGE_AWS_ACCOUNT_ID: "@@PACKAGE_AWS_ACCOUNT_ID@@"
+    command: |
+      set -euo pipefail
+      d="$(mktemp -d)"
+      trap 'rm -rf -- "$d"' EXIT
+      buildkite-agent artifact download "serverless-lambda-pipeline/**/*.sh" "$d"
+      bash "$d/serverless-lambda-pipeline/scripts/serverless/package.sh"
