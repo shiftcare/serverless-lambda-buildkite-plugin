@@ -78,6 +78,18 @@ package() {
   grep -qx -- "--no-install serverless package --stage qa" "${STUB_LOG}/npx.log"
 }
 
+@test "passes PACKAGE_REGION as --region" {
+  PACKAGE_REGION=ap-southeast-2 package
+  [ "$status" -eq 0 ]
+  grep -qx -- "--no-install serverless package --stage dev --region ap-southeast-2" "${STUB_LOG}/npx.log"
+}
+
+@test "rejects an invalid PACKAGE_REGION" {
+  PACKAGE_REGION='us-east-1 --stage x' package
+  [ "$status" -eq 1 ]
+  [ ! -f "${STUB_LOG}/npm.log" ]
+}
+
 @test "rejects an invalid PACKAGE_STAGE" {
   PACKAGE_STAGE='qa;id' package
   [ "$status" -eq 1 ]

@@ -32,6 +32,15 @@ PACKAGE_STAGE="${PACKAGE_STAGE:-dev}"
 name_re='^[a-z0-9][a-z0-9-]*$'
 [[ "$SERVICE" =~ $name_re ]] || fail "SERVICE must match ${name_re} (got '${SERVICE}')"
 [[ "$PACKAGE_STAGE" =~ $name_re ]] || fail "PACKAGE_STAGE must match ${name_re} (got '${PACKAGE_STAGE}')"
+# AWS_REGION was stripped above and Serverless v2 ignores it anyway; without
+# --region or provider.region, ${aws:region} resolves to us-east-1.
+PACKAGE_REGION="${PACKAGE_REGION:-}"
+region_args=()
+if [ -n "$PACKAGE_REGION" ]; then
+  region_re='^[a-z]{2}(-[a-z]+)+-[0-9]+$'
+  [[ "$PACKAGE_REGION" =~ $region_re ]] || fail "PACKAGE_REGION must match ${region_re} (got '${PACKAGE_REGION}')"
+  region_args=(--region "$PACKAGE_REGION")
+fi
 
 for tool in node npm npx unzip zip; do
   command -v "$tool" >/dev/null 2>&1 || fail "required tool not found: ${tool}"
@@ -56,7 +65,7 @@ fi
 [ "${sls_version%%.*}" = "2" ] || fail "serverless ${sls_version} found; only major version 2 is supported"
 echo "node ${node_version}, serverless ${sls_version}"
 
-sls package --stage "$PACKAGE_STAGE"
+sls package --stage "$PACKAGE_STAGE" ${region_args[@]+"${region_args[@]}"}
 
 shopt -s nullglob
 zips=(.serverless/*.zip)

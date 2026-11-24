@@ -21,8 +21,12 @@ SERVICE="${SERVICE:-}"
 PACKAGE_STAGE="${PACKAGE_STAGE:-dev}"
 PACKAGE_QUEUE="${PACKAGE_QUEUE:-tiny}"
 PACKAGE_AWS_ACCOUNT_ID="${PACKAGE_AWS_ACCOUNT_ID:-000000000000}"
+PACKAGE_REGION="${PACKAGE_REGION:-}"
 
 check SERVICE "$SERVICE" '^[a-z0-9][a-z0-9-]*$'
+if [ -n "$PACKAGE_REGION" ]; then
+  check PACKAGE_REGION "$PACKAGE_REGION" '^[a-z]{2}(-[a-z]+)+-[0-9]+$'
+fi
 check PACKAGE_STAGE "$PACKAGE_STAGE" '^[a-z0-9][a-z0-9-]*$'
 check PACKAGE_QUEUE "$PACKAGE_QUEUE" '^[a-z0-9][a-z0-9_-]*$'
 check PACKAGE_AWS_ACCOUNT_ID "$PACKAGE_AWS_ACCOUNT_ID" '^[0-9]{12}$'
@@ -51,6 +55,12 @@ addTemplate serverless/package \
   "PACKAGE_STAGE=${PACKAGE_STAGE}" \
   "PACKAGE_QUEUE=${PACKAGE_QUEUE}" \
   "PACKAGE_AWS_ACCOUNT_ID=${PACKAGE_AWS_ACCOUNT_ID}"
+
+if [ -n "$PACKAGE_REGION" ]; then
+  PACKAGE_REGION="$PACKAGE_REGION" yq --inplace \
+    '(.steps[] | select(.key == "package") | .env.PACKAGE_REGION) = strenv(PACKAGE_REGION)' \
+    "$PIPELINE_FILE"
+fi
 
 for name in ${passthrough[@]+"${passthrough[@]}"}; do
   PASSTHROUGH_NAME="$name" PASSTHROUGH_VALUE="${!name}" yq --inplace \

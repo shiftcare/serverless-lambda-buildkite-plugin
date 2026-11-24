@@ -9,7 +9,7 @@ setup() {
   mkdir -p "$PIPELINE_WORKDIR"
   printf 'steps: []\n' >"$PIPELINE_FILE"
   export SERVICE=demo-svc
-  unset PACKAGE_STAGE PACKAGE_QUEUE PACKAGE_AWS_ACCOUNT_ID PACKAGE_ENV_PASSTHROUGH
+  unset PACKAGE_STAGE PACKAGE_QUEUE PACKAGE_AWS_ACCOUNT_ID PACKAGE_ENV_PASSTHROUGH PACKAGE_REGION
 }
 
 generate() {
@@ -71,6 +71,16 @@ step() {
   [ "$(step '.steps[0].env.PACKAGE_AWS_ACCOUNT_ID')" = "$id" ]
 }
 
+@test "sets PACKAGE_REGION in the package step env only when given" {
+  generate
+  [ "$status" -eq 0 ]
+  [ "$(step '.steps[0].env | has("PACKAGE_REGION")')" = "false" ]
+  printf 'steps: []\n' >"$PIPELINE_FILE"
+  PACKAGE_REGION=ap-southeast-2 generate
+  [ "$status" -eq 0 ]
+  [ "$(step '.steps[0].env.PACKAGE_REGION')" = "ap-southeast-2" ]
+}
+
 @test "leaves no placeholder behind" {
   generate
   [ "$status" -eq 0 ]
@@ -88,7 +98,8 @@ step() {
 @test "rejects invalid inputs" {
   local spec
   for spec in 'SERVICE=Demo' 'PACKAGE_STAGE=qa b' 'PACKAGE_STAGE=-qa' 'PACKAGE_QUEUE=tiny: x' \
-    'PACKAGE_AWS_ACCOUNT_ID=12345' 'PACKAGE_AWS_ACCOUNT_ID=abcdefghijkl'; do
+    'PACKAGE_AWS_ACCOUNT_ID=12345' 'PACKAGE_AWS_ACCOUNT_ID=abcdefghijkl' \
+    'PACKAGE_REGION=us-east-1: x' 'PACKAGE_REGION=US-EAST-1'; do
     printf 'steps: []\n' >"$PIPELINE_FILE"
     run env "$spec" "${REPO_ROOT}/scripts/serverless/generate.sh"
     [ "$status" -eq 1 ] || { echo "accepted ${spec}"; return 1; }
