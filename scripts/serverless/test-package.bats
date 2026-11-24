@@ -27,6 +27,7 @@ fi'
 echo "$*" >>"$STUB_LOG/sls.log"
 case "$1" in
   --version)
+    [ "${SLS_VERSION_EXIT:-0}" = 0 ] || exit "$SLS_VERSION_EXIT"
     printf "Framework Core: %s (local)\nPlugin: 5.5.4\nSDK: 4.3.2\n" "${FAKE_SLS_VERSION:-2.72.3}"
     ;;
   package)
@@ -42,6 +43,7 @@ case "$1" in
       dotenv-suffix) echo "X=1" >"$src/.env.production" ;;
       dotenv-dir) mkdir -p "$src/config/.env"; echo "X=1" >"$src/config/.env/secret" ;;
       cfn) echo "{}" >"$src/cloudformation-template-update-stack.json" ;;
+      own-output) mkdir -p "$src/dist"; echo "stale" >"$src/dist/demo.zip" ;;
     esac
     # Like Serverless, include whatever already sits under dist/ in the service.
     [ ! -d dist ] || cp -R dist "$src/"
@@ -167,6 +169,21 @@ package() {
   [[ "$output" != *"dist/demo.zip"* ]]
   [[ "$output" == *"dist/service-build-output.js"* ]]
   [ -f "${SVC}/dist/service-build-output.js" ]
+}
+
+@test "refuses a zip that contains its own output path" {
+  FAKE_ZIP_MODE=own-output package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"dist/demo.zip"* ]]
+  [[ "$output" == *"forbidden entries"* ]]
+  [ ! -f "${STUB_LOG}/buildkite-agent.log" ]
+}
+
+@test "fails when the local serverless cannot report its version" {
+  SLS_VERSION_EXIT=1 package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"failed to report its version"* ]]
+  [ ! -f "${STUB_LOG}/buildkite-agent.log" ]
 }
 
 @test "PACKAGE_AWS_ACCOUNT_ID overrides the placeholder" {
