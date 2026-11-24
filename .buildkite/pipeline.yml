@@ -1,0 +1,39 @@
+steps:
+  - label: ":shell: shellcheck"
+    key: shellcheck
+    command: "git ls-files -z '*.sh' '*.bash' | xargs -0 shellcheck"
+    agents:
+      queue: "tiny"
+    timeout_in_minutes: 5
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+        - exit_status: 255
+          limit: 2
+
+  - label: ":bats: bats"
+    key: bats
+    command: "bats -r scripts test"
+    agents:
+      queue: "tiny"
+    timeout_in_minutes: 10
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+        - exit_status: 255
+          limit: 2
+
+  - label: ":mag: leak check"
+    key: leak_check
+    command: "scripts/ci/check-leaks.sh"
+    agents:
+      queue: "tiny"
+    timeout_in_minutes: 5
+    retry:
+      automatic:
+        - exit_status: -1
+          limit: 2
+        - exit_status: 255
+          limit: 2
