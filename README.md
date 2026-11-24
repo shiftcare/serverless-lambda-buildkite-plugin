@@ -16,7 +16,9 @@ are marked in `scripts/serverless/generate.sh`.
 
 > **This repo is public.** Never commit account IDs (the all-zeros placeholder
 > `000000000000` is the only exception), ARNs, bucket or function names, or
-> credentials. CI enforces this with `scripts/ci/check-leaks.sh`.
+> credentials. CI runs `scripts/ci/check-leaks.sh`, which catches
+> account-ID-shaped numbers, AWS ARN prefixes and AWS access-key shapes only;
+> bucket and function names are left to review.
 
 ## Service repo setup
 
@@ -30,6 +32,7 @@ steps:
     env:
       SERVICE: "example-service"
     command: |
+      rm -rf .buildkite-shared
       git init -q .buildkite-shared
       git -C .buildkite-shared fetch -q --depth 1 https://github.com/shiftcare/serverless-lambda-pipeline.git refs/tags/v1.0.0
       git -C .buildkite-shared checkout -q FETCH_HEAD
