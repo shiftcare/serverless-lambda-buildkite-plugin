@@ -143,11 +143,11 @@ step() {
   local spec
   # shellcheck disable=SC2016  # literal name under test
   for spec in AWS_SECRET_ACCESS_KEY AWS_REGION AMAZON_SECRET_ACCESS_KEY BUILDKITE_AGENT_ACCESS_TOKEN BK_X \
-    SERVICE PACKAGE_STAGE SECRETS_PROVIDER_MODE PATH HOME NODE_OPTIONS \
+    SERVICE PACKAGE_STAGE SECRETS_PROVIDER_MODE PATH HOME NODE_OPTIONS TMPDIR TMP TEMP \
     NOT_SET_ANYWHERE lower_case 1ABC 'A-B' 'X[$(id)]' MULTI; do
     printf 'steps: []\n' >"$PIPELINE_FILE"
     run env -u NOT_SET_ANYWHERE MULTI=$'a\nb' AWS_SECRET_ACCESS_KEY=k AWS_REGION=r AMAZON_SECRET_ACCESS_KEY=k \
-      BUILDKITE_AGENT_ACCESS_TOKEN=t BK_X=x lower_case=v \
+      BUILDKITE_AGENT_ACCESS_TOKEN=t BK_X=x lower_case=v TMPDIR=/tmp TMP=/tmp TEMP=/tmp \
       PACKAGE_ENV_PASSTHROUGH="$spec" "${REPO_ROOT}/scripts/serverless/generate.sh"
     [ "$status" -eq 1 ] || { echo "accepted ${spec}"; return 1; }
     [[ "$output" == *PACKAGE_ENV_PASSTHROUGH* ]] || { echo "${spec}: ${output}"; return 1; }

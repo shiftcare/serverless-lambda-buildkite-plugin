@@ -40,7 +40,8 @@ for name in ${passthrough[@]+"${passthrough[@]}"}; do
   check "PACKAGE_ENV_PASSTHROUGH entry" "$name" '^[A-Z][A-Z0-9_]*$'
   case "$name" in
     AWS_* | AMAZON_* | BUILDKITE* | BK_* | PACKAGE_* | PIPELINE_* | LD_* | DYLD_* | \
-      SERVICE | SECRETS_PROVIDER_MODE | PATH | HOME | SHELL | IFS | ENV | BASH_ENV | NODE_OPTIONS)
+      SERVICE | SECRETS_PROVIDER_MODE | PATH | HOME | SHELL | IFS | ENV | BASH_ENV | NODE_OPTIONS | \
+      TMPDIR | TMP | TEMP)
       fail "PACKAGE_ENV_PASSTHROUGH: ${name} is reserved"
       ;;
   esac

@@ -56,7 +56,7 @@ Set these in the bootstrap step's `env`:
 | `PACKAGE_REGION` | empty | Value for `serverless package --region`. Required when `serverless.yml` has no `provider.region`: `AWS_REGION` is stripped while packaging, and Serverless v2 then resolves `${aws:region}` to `us-east-1`. |
 | `PACKAGE_QUEUE` | `tiny` | Agent queue for the package step. |
 | `PACKAGE_AWS_ACCOUNT_ID` | `000000000000` | Exported as `AWS_ACCOUNT_ID` while packaging. |
-| `PACKAGE_ENV_PASSTHROUGH` | empty | Space- or comma-separated names of other bootstrap-step variables to copy into the package step's `env`. Each must be set, match `^[A-Z][A-Z0-9_]*$`, have a single-line value, and not be reserved (`AWS_*`, `AMAZON_*`, `BUILDKITE*`, `BK_*`, `PACKAGE_*`, `PIPELINE_*`, `LD_*`, `DYLD_*`, `SERVICE`, `SECRETS_PROVIDER_MODE`, `PATH`, `HOME`, `SHELL`, `IFS`, `ENV`, `BASH_ENV`, `NODE_OPTIONS`). **Never list a secret**: values are written into the generated pipeline YAML and are visible in the Buildkite UI. |
+| `PACKAGE_ENV_PASSTHROUGH` | empty | Space- or comma-separated names of other bootstrap-step variables to copy into the package step's `env`. Each must be set, match `^[A-Z][A-Z0-9_]*$`, have a single-line value, and not be reserved (`AWS_*`, `AMAZON_*`, `BUILDKITE*`, `BK_*`, `PACKAGE_*`, `PIPELINE_*`, `LD_*`, `DYLD_*`, `SERVICE`, `SECRETS_PROVIDER_MODE`, `PATH`, `HOME`, `SHELL`, `IFS`, `ENV`, `BASH_ENV`, `NODE_OPTIONS`, `TMPDIR`, `TMP`, `TEMP`). **Never list a secret**: values are written into the generated pipeline YAML and are visible in the Buildkite UI. |
 
 Local and test switches:
 
@@ -76,6 +76,11 @@ are needed per service before migrating:
 2. `secretsprovider.js`: when `SECRETS_PROVIDER_MODE=placeholder`, return
    placeholder values and make no AWS calls.
 
+Packaging also refuses to start when the service root holds any `.env` or
+`.env.*` file, or when `serverless.yml` sets `custom.dotenv.path` or
+`custom.dotenv.basePath` (see step 3 below). No service commits such a file
+today.
+
 Buildkite does not pass the bootstrap step's `env` on to the steps it uploads.
 If `serverless.yml` reads other `${env:...}` values at package time, set them
 in the bootstrap step's `env` and list their names in
@@ -85,7 +90,10 @@ Buildkite UI.
 
 ## How packaging withholds AWS credentials
 
-`scripts/serverless/package.sh` runs in the service checkout and:
+`scripts/serverless/package.sh` runs in the service checkout. It refuses to
+start when its scratch dir or its own scripts resolve inside that checkout
+(for example, `TMPDIR` pointing there), since Serverless would package them
+into the zip. Then it:
 
 1. Unsets every `AWS_*` and `AMAZON_*` environment variable (AWS SDK v2 still
    reads the legacy `AMAZON_*` credential names) and sets
@@ -96,13 +104,19 @@ Buildkite UI.
    placeholder) and `SECRETS_PROVIDER_MODE=placeholder`.
 2. Deletes a previous `dist/<SERVICE>.zip` (only that file), so Serverless
    cannot package an old artifact into the new one.
-3. Runs `npm ci`, then the lockfile-pinned, service-local Serverless at
+3. Runs `npm ci --include=dev` (Serverless is a dev dependency, and a
+   passed-through `NODE_ENV=production` would otherwise omit it), then the
+   lockfile-pinned, service-local Serverless at
    `node_modules/.bin/serverless`. A global install is never used: the build
    fails if `npm ci` installed no local Serverless, and unless it is major
-   version 2. After `npm ci` and before packaging, it refuses to continue if
-   `.env.<PACKAGE_STAGE>` or `.env` exists in the service root: with
-   `useDotenv: true`, Serverless v2 loads that file into its own environment,
-   which could hand it AWS credentials. The refusal applies whatever
+   version 2. After `npm ci` and before Serverless first runs, it refuses to
+   continue if any `.env` or `.env.*` file exists in the service root, or if
+   `serverless.yml` sets `custom.dotenv.path` or `custom.dotenv.basePath`.
+   Two loaders read these files into Serverless's own environment, which
+   could hand it AWS credentials: the core loader (`useDotenv: true`) reads
+   `.env.<stage>` or `.env`, and `serverless-dotenv-plugin` reads
+   `.env.<NODE_ENV, else development>` or `.env` and loads every variable,
+   whatever its `include` list says. The refusal applies whatever
    `useDotenv` says.
 4. Expects exactly one `.serverless/*.zip`. Individually packaged functions are
    not supported.
@@ -117,7 +131,8 @@ Buildkite UI.
 7. Uploads only `dist/<SERVICE>.zip` as a build artifact.
 
 No Docker and no Docker Hub are involved. Agents need Node 22 with npm on
-`PATH`, plus `zip`, `unzip` and `yq` v4.
+`PATH`, plus `zip`, `unzip` and `yq` v4 (the generator and the package step
+both use it).
 
 **Limits.** This removes credentials from the SDKs; it is not a sandbox.
 `AWS_EC2_METADATA_DISABLED` does not block the network path to IMDS, so code

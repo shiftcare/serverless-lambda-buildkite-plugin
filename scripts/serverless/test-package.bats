@@ -96,7 +96,7 @@ package() {
 @test "runs npm ci and serverless package for the default stage" {
   package
   [ "$status" -eq 0 ]
-  [ "$(cat "${STUB_LOG}/npm.log")" = "ci" ]
+  [ "$(cat "${STUB_LOG}/npm.log")" = "ci --include=dev" ]
   grep -qx -- "package --stage dev" "${STUB_LOG}/sls.log"
 }
 
@@ -202,10 +202,52 @@ package() {
   [ ! -f "${STUB_LOG}/sls.log" ]
 }
 
-@test "a .env file for another stage does not block packaging" {
-  echo "X=1" >"${SVC}/.env.prod"
-  PACKAGE_STAGE=qa package
+@test "refuses a .env file for any other stage or NODE_ENV (serverless-dotenv-plugin)" {
+  local f
+  for f in .env.development .env.production .env.prod; do
+    rm -f "${SVC}"/.env*
+    echo "AWS_ACCESS_KEY_ID=from-dotenv" >"${SVC}/${f}"
+    PACKAGE_STAGE=qa package
+    [ "$status" -eq 1 ] || { echo "accepted ${f}"; return 1; }
+    [[ "$output" == *"${f} exists in the service root"* ]]
+  done
+  [ ! -f "${STUB_LOG}/sls.log" ]
+}
+
+@test "refuses serverless-dotenv-plugin options that move its file" {
+  local opt
+  for opt in path basePath; do
+    printf 'service: demo\ncustom:\n  dotenv:\n    %s: config/\n' "$opt" >"${SVC}/serverless.yml"
+    package
+    [ "$status" -eq 1 ] || { echo "accepted ${opt}"; return 1; }
+    [[ "$output" == *"serverless.yml sets custom.dotenv ${opt}"* ]]
+  done
+  [ ! -f "${STUB_LOG}/sls.log" ]
+}
+
+@test "allows serverless-dotenv-plugin include lists and CloudFormation tags" {
+  printf '%s\n' 'service: demo' 'custom:' '  dotenv:' '    include:' '      - NOTHING' \
+    'resources:' '  Outputs:' '    Arn:' '      Value: !GetAtt Fn.Arn' >"${SVC}/serverless.yml"
+  package
   [ "$status" -eq 0 ]
+}
+
+@test "refuses a scratch dir inside the service checkout (TMPDIR)" {
+  mkdir -p "${SVC}/tmp"
+  TMPDIR="${SVC}/tmp" package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"is inside the service checkout"* ]]
+  [ ! -f "${STUB_LOG}/npm.log" ]
+}
+
+@test "refuses to run from scripts downloaded into the service checkout" {
+  mkdir -p "${SVC}/ci"
+  cp "${REPO_ROOT}/scripts/serverless/package.sh" "${SVC}/ci/"
+  run bash "${SVC}/ci/package.sh"
+  [ "$status" -eq 1 ]
+  # pwd -P may resolve SVC (macOS: /var -> /private/var), so match the suffix.
+  [[ "$output" == *"/svc/ci is inside the service checkout"* ]]
+  [ ! -f "${STUB_LOG}/npm.log" ]
 }
 
 @test "refuses to package when .env.<PACKAGE_STAGE> exists in the service root" {

@@ -12,6 +12,17 @@ fail() {
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 
+# Serverless packages whatever sits under the service root, so neither this
+# script's scratch dir nor the downloaded scripts may live there (a TMPDIR
+# pointing into the checkout would put both in the zip).
+root="$(pwd -P)"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+for path in "$(cd "$work" && pwd -P)" "$script_dir"; do
+  case "${path}/" in
+    "${root}/"*) fail "${path} is inside the service checkout ${root}; Serverless would package it (point TMPDIR outside the checkout)" ;;
+  esac
+done
+
 # Leave the AWS SDKs no credential source: no AWS_* env vars, no AMAZON_* ones
 # (AWS SDK v2 still reads legacy AMAZON_ACCESS_KEY_ID and friends), no IMDS
 # lookup (AWS_EC2_METADATA_DISABLED only stops the SDKs; it does not block
@@ -43,7 +54,7 @@ if [ -n "$PACKAGE_REGION" ]; then
   region_args=(--region "$PACKAGE_REGION")
 fi
 
-for tool in node npm unzip zip; do
+for tool in node npm unzip yq zip; do
   command -v "$tool" >/dev/null 2>&1 || fail "required tool not found: ${tool}"
 done
 
@@ -53,17 +64,31 @@ out="dist/${SERVICE}.zip"
 # dist/ itself may hold the service's own build output.
 rm -f -- "$out"
 
-npm ci
+# --include=dev: Serverless is a devDependency, and a passed-through
+# NODE_ENV=production would otherwise make npm ci omit it.
+npm ci --include=dev
 
-# With useDotenv: true, Serverless v2 loads .env.<stage>, or else .env, from
-# this directory into its own environment at package time, which could hand
-# it AWS credentials after the scrub above. Refuse both whatever useDotenv
-# says. Checked after npm ci (a lifecycle script could create one) and before
-# `sls package`, the first command that reads them.
-for dotenv in ".env.${PACKAGE_STAGE}" .env; do
+# Dotenv files load into Serverless's own environment at package time and
+# could hand it AWS credentials after the scrub above: the core loader
+# (useDotenv: true) reads .env.<stage> or .env, and serverless-dotenv-plugin
+# reads .env.<NODE_ENV, else "development"> or .env, loading every variable
+# into the process whatever its `include` list says. Refuse every .env and
+# .env.* in the service root, and the plugin options that move its file
+# elsewhere. Checked after npm ci (a lifecycle script could create one) and
+# before `sls --version`, the first Serverless run.
+shopt -s nullglob
+for dotenv in .env .env.*; do
   if [ -e "$dotenv" ] || [ -L "$dotenv" ]; then
     fail "${dotenv} exists in the service root; Serverless can load it at package time (remove it from the checkout)"
   fi
+done
+shopt -u nullglob
+for config in serverless.yml serverless.yaml; do
+  [ -f "$config" ] || continue
+  moved="$(yq '.custom.dotenv | select(tag == "!!map") | keys | map(select(. == "path" or . == "basePath")) | join(" ")' "$config")" ||
+    fail "cannot read custom.dotenv from ${config}"
+  [ -z "$moved" ] ||
+    fail "${config} sets custom.dotenv ${moved}; package only checks the service root for dotenv files (remove the option)"
 done
 
 # Only the lockfile-pinned, service-local Serverless: `npx --no-install` can
