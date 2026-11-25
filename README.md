@@ -172,7 +172,9 @@ infrastructure, outside this repo.
   step keyed `package`), the bootstrap uploads the scripts again but not the
   pipeline, and exits 0. The scripts are re-uploaded because
   `buildkite-agent artifact download` searches only the latest attempt of a
-  retried job. To rerun packaging, retry the package step itself. A first
+  retried job. A package job that starts its download while the bootstrap
+  retry has not yet uploaded them finds no scripts and fails; retry that
+  package job. To rerun packaging, retry the package step itself. A first
   attempt always uploads the pipeline, so a second bootstrap in one build
   still fails on the duplicate key.
 - The pipeline is uploaded with
