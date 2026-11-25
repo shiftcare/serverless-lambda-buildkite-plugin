@@ -40,28 +40,33 @@ generate_pipeline() {
 @test "a first attempt never skips, even if a package step exists (duplicate must fail)" {
   BUILDKITE_RETRY_COUNT=0 STUB_STEP_STATE=passed generate_pipeline
   [ "$status" -eq 0 ]
-  run cut -f2 "${STUB_LOG}/buildkite-agent.log"
-  [[ "${lines[0]}" != "step get"* ]]
-  [[ "${lines[1]}" == "pipeline upload "* ]]
+  run grep -c 'step get' "${STUB_LOG}/buildkite-agent.log"
+  [ "$output" = "0" ]
+  run grep -c 'pipeline upload' "${STUB_LOG}/buildkite-agent.log"
+  [ "$output" = "1" ]
 }
 
 @test "a retried bootstrap checks the build, then uploads when no package step exists" {
   BUILDKITE_RETRY_COUNT=1 BUILDKITE_BUILD_ID=build-123 generate_pipeline
   [ "$status" -eq 0 ]
   run cut -f2 "${STUB_LOG}/buildkite-agent.log"
-  [ "${lines[0]}" = "step get state --step package --build build-123" ]
-  [ "${lines[1]}" = "artifact upload serverless-lambda-pipeline/**/*.sh" ]
+  [ "${lines[0]}" = "artifact upload serverless-lambda-pipeline/**/*.sh" ]
+  [ "${lines[1]}" = "step get state --step package --build build-123" ]
   [[ "${lines[2]}" == "pipeline upload "* ]]
 }
 
-@test "a retried bootstrap uploads nothing when the package step already exists" {
+@test "a retried bootstrap re-uploads the scripts but not the pipeline when the package step exists" {
   local state
   for state in waiting running passed failed; do
     rm -f "${STUB_LOG}/buildkite-agent.log"
     BUILDKITE_RETRY_COUNT=1 STUB_STEP_STATE="$state" generate_pipeline
     [ "$status" -eq 0 ] || { echo "${state}: ${output}"; return 1; }
     [[ "$output" == *"already has the package step (state: ${state})"* ]]
-    run grep -c 'upload' "${STUB_LOG}/buildkite-agent.log"
+    # Later steps download scripts from the latest attempt only, so this
+    # attempt must upload them again.
+    run grep -c 'artifact upload serverless-lambda-pipeline/' "${STUB_LOG}/buildkite-agent.log"
+    [ "$output" = "1" ]
+    run grep -c 'pipeline upload' "${STUB_LOG}/buildkite-agent.log"
     [ "$output" = "0" ]
   done
 }

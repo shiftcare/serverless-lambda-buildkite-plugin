@@ -29,20 +29,23 @@ if [ "${PIPELINE_DRY_RUN:-}" = "1" ]; then
   exit 0
 fi
 
-# A retried bootstrap job must not upload again. If an earlier attempt already
-# uploaded the pipeline, this build holds its steps (the package step has the
+# Scripts are uploaded on every attempt, retries included: by default
+# `buildkite-agent artifact download` searches only the latest attempt of a
+# retried job, so later steps would not find an earlier attempt's scripts.
+generateArtefacts
+
+# A retried bootstrap job must not upload the pipeline again. If an earlier
+# attempt already did, this build holds its steps (the package step has the
 # fixed key "package"), and a second upload with the same key is rejected.
-# Scripts are uploaded before the pipeline, so they are in place too. Only a
-# retry (BUILDKITE_RETRY_COUNT > 0) checks: a first attempt that meets an
-# existing package step (a second bootstrap in one build) must still fail on
-# the duplicate key. A failed lookup also falls through to the upload.
+# Only a retry (BUILDKITE_RETRY_COUNT > 0) checks: a first attempt that meets
+# an existing package step (a second bootstrap in one build) must still fail
+# on the duplicate key. A failed lookup also falls through to the upload.
 if [ "${BUILDKITE_RETRY_COUNT:-0}" != 0 ] &&
   state="$(buildkite-agent step get state --step package --build "${BUILDKITE_BUILD_ID:-}")"; then
-  echo "generate_pipeline: retry ${BUILDKITE_RETRY_COUNT}: this build already has the package step (state: ${state}) from an earlier attempt; not uploading again. Retry the package step itself to rerun it."
+  echo "generate_pipeline: retry ${BUILDKITE_RETRY_COUNT}: this build already has the package step (state: ${state}) from an earlier attempt; scripts re-uploaded, pipeline not uploaded again. Retry the package step itself to rerun it."
   exit 0
 fi
 
-generateArtefacts
 # --no-interpolation: step commands are plain bash ($VAR, not $$VAR), and
 # substituted values must reach the agent verbatim.
 buildkite-agent pipeline upload --no-interpolation "$PIPELINE_FILE"
