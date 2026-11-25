@@ -63,10 +63,11 @@ case "$1" in
     case "${FAKE_ZIP_MODE:-ok}" in
       layer-only) zipname=layer.zip artifact= ;;
       other-artifact) artifact=prebuilt.zip ;;
+      artifact-named-like-layer) zipname=layer.zip artifact=layer.zip ;;
     esac
     (cd "$src" && zip -qr "$OLDPWD/.serverless/$zipname" .)
     [ "${FAKE_ZIP_MODE:-ok}" = no-state ] ||
-      printf "{\"package\":{\"artifact\":\"%s\"}}\n" "$artifact" >.serverless/serverless-state.json
+      printf "{\"service\":{\"service\":\"demo\"},\"package\":{\"artifact\":\"%s\"}}\n" "$artifact" >.serverless/serverless-state.json
     [ "${FAKE_ZIP_MODE:-ok}" != two ] || cp .serverless/demo.zip .serverless/other.zip
     exit "${SLS_STUB_EXIT:-0}"
     ;;
@@ -423,6 +424,13 @@ package() {
   FAKE_ZIP_MODE=other-artifact package
   [ "$status" -eq 1 ]
   [[ "$output" == *"not the service package recorded"*"prebuilt.zip"* ]]
+  [ ! -f "${STUB_LOG}/buildkite-agent.log" ]
+}
+
+@test "refuses a prebuilt package.artifact named like a layer zip" {
+  FAKE_ZIP_MODE=artifact-named-like-layer package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"layer.zip is not the service package Serverless builds (demo.zip)"* ]]
   [ ! -f "${STUB_LOG}/buildkite-agent.log" ]
 }
 

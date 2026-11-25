@@ -126,9 +126,10 @@ into the zip. Then it:
    `useDotenv` says.
 4. Expects exactly one `.serverless/*.zip`, and requires it to be the service
    package Serverless records as `package.artifact` in
-   `.serverless/serverless-state.json` (so a lone layer zip, or a prebuilt
-   `package.artifact`, is refused). Individually packaged functions are not
-   supported.
+   `.serverless/serverless-state.json` under the name Serverless gives the
+   service package it builds, `<service>.zip` (so a lone layer zip, or a
+   prebuilt `package.artifact`, is refused). Individually packaged functions
+   are not supported.
 5. Refuses the zip if it contains `.serverless/`, `.env` (a file, or anything
    under a `.env/` directory), `.env.*`,
    `cloudformation-template-*.json`, `serverless-state.json` or
@@ -210,7 +211,9 @@ Leak-check false positives: add `<path>:<fixed string>` to `.leak-allowlist`.
 Hits in that file on lines containing that string are then ignored. The
 allowlist is public and is scanned like any other file, with no exemptions, so
 `<fixed string>` must be surrounding context (e.g. `docs.md:example account`),
-never the flagged value itself. Tracked paths containing `:` fail the check,
+never the flagged value itself. A hit on a line holding nothing but the value,
+or in a file whose path contains a 12-digit run, cannot be narrowly
+allowlisted; change the file instead. Tracked paths containing `:` fail the check,
 since hits are reported as `path:line`. Binary files cannot be checked
 line by line: a tracked file git classifies as binary fails by path when it
 matches any pattern (including the all-zeros placeholder or a longer digit

@@ -129,6 +129,17 @@ docs.md:example "
   [[ "$output" == *"a:1:b.txt: path contains ':'"* ]]
 }
 
+@test "finds colon paths in subdirectories whatever the pathspec settings" {
+  mkdir -p "${REPO}/sub/deep"
+  put 'sub/deep/x:y.txt' "nothing here"
+  local var
+  for var in GIT_GLOB_PATHSPECS GIT_LITERAL_PATHSPECS GIT_NOGLOB_PATHSPECS; do
+    run env "${var}=1" "$CHECK" "$REPO"
+    [ "$status" -eq 1 ] || { echo "${var}: ${output}"; return 1; }
+    [[ "$output" == *"sub/deep/x:y.txt: path contains ':'"* ]]
+  done
+}
+
 @test "a colon path with no hit still fails" {
   put 'a:b.txt' "nothing here"
   run "$CHECK" "$REPO"

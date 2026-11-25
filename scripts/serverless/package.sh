@@ -155,6 +155,14 @@ artifact="$(yq -p json '.package.artifact // ""' "$state")" ||
   fail "Serverless built no service package (package.artifact is empty in ${state}); ${zip_path} is not the service artifact"
 [ ".serverless/${artifact}" = "$zip_path" ] ||
   fail "${zip_path} is not the service package recorded in ${state} (${artifact})"
+# Only a file name is recorded, so also require the name Serverless gives the
+# service package it builds (<service>.zip): a user-set package.artifact named
+# like a layer zip would otherwise pass.
+sls_service="$(yq -p json '.service.service // ""' "$state")" ||
+  fail "cannot read service.service from ${state}"
+if [ -z "$sls_service" ] || [ "$artifact" != "${sls_service}.zip" ]; then
+  fail "${artifact} is not the service package Serverless builds (${sls_service:-?}.zip); a prebuilt package.artifact is not supported"
+fi
 
 # Resolved config can carry secrets; none of it may ship in the code zip.
 # Also refuse our own output path, in case a previous artifact still got in.

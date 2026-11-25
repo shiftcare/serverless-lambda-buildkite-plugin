@@ -50,7 +50,8 @@ binary="$(LC_ALL=C comm -23 \
 failed=0
 # Hits are parsed as "path:line:content", so a path containing ':' would be
 # split in the wrong place and could match another file's allowlist entry.
-colon_paths="$(LC_ALL=C git -C "$root" ls-files -- '*:*')" ||
+# Filtered by name, not pathspec: GIT_*_PATHSPECS variables change glob matching.
+colon_paths="$(git -C "$root" ls-files -z | tr '\0' '\n' | LC_ALL=C awk 'index($0, ":")')" ||
   { echo "check-leaks: git ls-files failed" >&2; exit 2; }
 if [ -n "$colon_paths" ]; then
   while IFS= read -r f; do
