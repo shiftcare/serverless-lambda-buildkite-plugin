@@ -195,6 +195,17 @@ exec "$REAL_GIT" "$@"'
   [[ "$output" == *"git grep failed (exit 128)"* ]]
 }
 
+@test "exits 2, not clean, when sorting the match lists fails" {
+  printf 'x\000y %s\n' "$ACCOUNT_ID" >"${REPO}/blob.bin"
+  track blob.bin
+  setup_stubs
+  stub sort 'exit 1'
+  run "$CHECK" "$REPO"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"sort failed"* ]]
+  [[ "$output" != *"check-leaks: clean"* ]]
+}
+
 @test "a binary file without a match passes" {
   printf 'x\000y\n' >"${REPO}/blob.bin"
   track blob.bin

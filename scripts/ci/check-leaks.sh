@@ -43,9 +43,16 @@ scan() {
 hits="$(scan -n -I)"
 matching="$(scan -l)"
 text_matching="$(scan -l -I)"
-binary="$(LC_ALL=C comm -23 \
-  <(printf '%s\n' "$matching" | LC_ALL=C sort) \
-  <(printf '%s\n' "$text_matching" | LC_ALL=C sort) | sed '/^$/d')"
+# Sort into variables first: a failure inside a process substitution would not
+# reach this script, and an empty sorted list would hide binary matches.
+sort_or_fail() {
+  printf '%s\n' "$1" | LC_ALL=C sort ||
+    { echo "check-leaks: sort failed" >&2; exit 2; }
+}
+matching_sorted="$(sort_or_fail "$matching")" || exit 2
+text_sorted="$(sort_or_fail "$text_matching")" || exit 2
+binary="$(LC_ALL=C comm -23 <(printf '%s\n' "$matching_sorted") <(printf '%s\n' "$text_sorted") |
+  sed '/^$/d')" || { echo "check-leaks: comm failed" >&2; exit 2; }
 
 failed=0
 # Hits are parsed as "path:line:content", so a path containing ':' would be

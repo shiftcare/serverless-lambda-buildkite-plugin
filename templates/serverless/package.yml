@@ -18,5 +18,12 @@ steps:
       set -euo pipefail
       d="$(mktemp -d)"
       trap 'rm -rf -- "$d"' EXIT
-      buildkite-agent artifact download "serverless-lambda-pipeline/**/*.sh" "$d"
+      # Download from the bootstrap job that uploaded this pipeline, retried
+      # attempts included: by default only a job's latest attempt is searched,
+      # and a bootstrap retry may not have re-uploaded the scripts yet.
+      scope=()
+      if [ -n "${PIPELINE_SCRIPTS_JOB:-}" ]; then
+        scope=(--step "$PIPELINE_SCRIPTS_JOB" --include-retried-jobs)
+      fi
+      buildkite-agent artifact download ${scope[@]+"${scope[@]}"} "serverless-lambda-pipeline/**/*.sh" "$d"
       bash "$d/serverless-lambda-pipeline/scripts/serverless/package.sh"

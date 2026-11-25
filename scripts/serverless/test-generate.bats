@@ -9,7 +9,7 @@ setup() {
   mkdir -p "$PIPELINE_WORKDIR"
   printf 'steps: []\n' >"$PIPELINE_FILE"
   export SERVICE=demo-svc
-  unset PACKAGE_STAGE PACKAGE_QUEUE PACKAGE_AWS_ACCOUNT_ID PACKAGE_ENV_PASSTHROUGH PACKAGE_REGION
+  unset PACKAGE_STAGE PACKAGE_QUEUE PACKAGE_AWS_ACCOUNT_ID PACKAGE_ENV_PASSTHROUGH PACKAGE_REGION BUILDKITE_JOB_ID
 }
 
 generate() {
@@ -45,11 +45,43 @@ step() {
   generate
   [ "$status" -eq 0 ]
   [ "$(step '.steps[0] | has("artifact_paths")')" = "false" ]
-  # shellcheck disable=SC2016  # literal command text
-  [[ "$(step '.steps[0].command')" == *'buildkite-agent artifact download "serverless-lambda-pipeline/**/*.sh" "$d"'* ]]
   # shellcheck disable=SC2016
   [[ "$(step '.steps[0].command')" == *'bash "$d/serverless-lambda-pipeline/scripts/serverless/package.sh"'* ]]
   [ -f "${REPO_ROOT}/scripts/serverless/package.sh" ]
+}
+
+# Runs the generated package step's command with a stubbed buildkite-agent and
+# prints the artifact download arguments it used.
+run_package_command() {
+  setup_stubs
+  stub_buildkite_agent
+  step '.steps[0].command' >"${BATS_TEST_TMPDIR}/cmd.sh"
+  PIPELINE_SCRIPTS_JOB="$(step '.steps[0].env.PIPELINE_SCRIPTS_JOB // ""')" \
+    bash "${BATS_TEST_TMPDIR}/cmd.sh" >/dev/null 2>&1 || true
+  grep 'artifact download' "${STUB_LOG}/buildkite-agent.log" | cut -f2
+}
+
+@test "the package step downloads the scripts from the bootstrap job, retried attempts included" {
+  BUILDKITE_JOB_ID=0190abcd-1234-5678-9abc-def012345678 generate
+  [ "$status" -eq 0 ]
+  [ "$(step '.steps[0].env.PIPELINE_SCRIPTS_JOB')" = "0190abcd-1234-5678-9abc-def012345678" ]
+  run run_package_command
+  [[ "$output" == "artifact download --step 0190abcd-1234-5678-9abc-def012345678 --include-retried-jobs serverless-lambda-pipeline/**/*.sh "* ]]
+}
+
+@test "outside Buildkite the package step uses the default artifact search" {
+  generate
+  [ "$status" -eq 0 ]
+  [ "$(step '.steps[0].env | has("PIPELINE_SCRIPTS_JOB")')" = "false" ]
+  run run_package_command
+  [[ "$output" == "artifact download serverless-lambda-pipeline/**/*.sh "* ]]
+}
+
+@test "rejects a malformed BUILDKITE_JOB_ID" {
+  # shellcheck disable=SC2016  # literal value under test
+  BUILDKITE_JOB_ID='x; $(id)' generate
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"invalid BUILDKITE_JOB_ID"* ]]
 }
 
 @test "downloads from the artifact prefix generateArtefacts uploads to" {

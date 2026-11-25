@@ -113,7 +113,9 @@ into the zip. Then it:
 3. Runs `npm ci --include=dev` (Serverless is a dev dependency, and a
    passed-through `NODE_ENV=production` would otherwise omit it), then the
    lockfile-pinned, service-local Serverless at
-   `node_modules/.bin/serverless`. A global install is never used: the build
+   `node_modules/.bin/serverless`, as `serverless package --package
+   .serverless` so a service's own `package.path` cannot move the output
+   away from the checks below. A global install is never used: the build
    fails if `npm ci` installed no local Serverless, and unless it is major
    version 2. After `npm ci` and before Serverless first runs, it refuses to
    continue if any `.env` or `.env.*` file exists in the service root, or if
@@ -168,17 +170,16 @@ infrastructure, outside this repo.
 - The bootstrap step uploads `scripts/**/*.sh` as build artifacts under
   `serverless-lambda-pipeline/`, staged in a temp dir and never in the service
   checkout. Later steps download them into their own temp dir, so they run the
-  same script version as the generator.
+  same script version as the generator. The package step downloads from the
+  exact bootstrap job that uploaded its pipeline (`--step <job id>
+  --include-retried-jobs`, agent v3.131.0 or later), so a retry of that job
+  does not hide the scripts.
 - Retrying the bootstrap step is safe. On a retry (`BUILDKITE_RETRY_COUNT` >
   0), if an earlier attempt already uploaded the pipeline (the build has a
   step keyed `package`), the bootstrap uploads the scripts again but not the
-  pipeline, and exits 0. The scripts are re-uploaded because
-  `buildkite-agent artifact download` searches only the latest attempt of a
-  retried job. A package job that starts its download while the bootstrap
-  retry has not yet uploaded them finds no scripts and fails; retry that
-  package job. To rerun packaging, retry the package step itself. A first
-  attempt always uploads the pipeline, so a second bootstrap in one build
-  still fails on the duplicate key.
+  pipeline, and exits 0. To rerun packaging, retry the package step itself.
+  A first attempt always uploads the pipeline, so a second bootstrap in one
+  build still fails on the duplicate key.
 - The pipeline is uploaded with
   `buildkite-agent pipeline upload --no-interpolation`. Template commands are
   plain bash (`$VAR`, not `$$VAR`). Substituted values reach the agent verbatim.

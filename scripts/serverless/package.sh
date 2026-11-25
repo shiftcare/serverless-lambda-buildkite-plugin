@@ -151,7 +151,9 @@ fi
 [ "${sls_version%%.*}" = "2" ] || fail "serverless ${sls_version} found; only major version 2 is supported"
 echo "node ${node_version}, serverless ${sls_version}"
 
-sls package --stage "$PACKAGE_STAGE" ${region_args[@]+"${region_args[@]}"}
+# --package .serverless: a service-level package.path would otherwise move
+# Serverless's output elsewhere, while every check below reads .serverless/.
+sls package --stage "$PACKAGE_STAGE" --package .serverless ${region_args[@]+"${region_args[@]}"}
 
 shopt -s nullglob
 zips=(.serverless/*.zip)

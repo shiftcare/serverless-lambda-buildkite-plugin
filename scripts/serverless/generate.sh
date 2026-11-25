@@ -63,6 +63,16 @@ if [ -n "$PACKAGE_REGION" ]; then
     "$PIPELINE_FILE"
 fi
 
+# The package step downloads the scripts from this exact bootstrap job (see
+# templates/serverless/package.yml). Outside Buildkite (dry runs, tests) the
+# variable is unset and the download falls back to the default search.
+if [ -n "${BUILDKITE_JOB_ID:-}" ]; then
+  check BUILDKITE_JOB_ID "$BUILDKITE_JOB_ID" '^[0-9a-f][0-9a-f-]*$'
+  PIPELINE_SCRIPTS_JOB="$BUILDKITE_JOB_ID" yq --inplace \
+    '(.steps[] | select(.key == "package") | .env.PIPELINE_SCRIPTS_JOB) = strenv(PIPELINE_SCRIPTS_JOB)' \
+    "$PIPELINE_FILE"
+fi
+
 for name in ${passthrough[@]+"${passthrough[@]}"}; do
   PASSTHROUGH_NAME="$name" PASSTHROUGH_VALUE="${!name}" yq --inplace \
     '(.steps[] | select(.key == "package") | .env[strenv(PASSTHROUGH_NAME)]) = strenv(PASSTHROUGH_VALUE)' \

@@ -116,19 +116,19 @@ package() {
   package
   [ "$status" -eq 0 ]
   [ "$(cat "${STUB_LOG}/npm.log")" = "ci --include=dev" ]
-  grep -qx -- "package --stage dev" "${STUB_LOG}/sls.log"
+  grep -qx -- "package --stage dev --package .serverless" "${STUB_LOG}/sls.log"
 }
 
 @test "honours PACKAGE_STAGE" {
   PACKAGE_STAGE=qa package
   [ "$status" -eq 0 ]
-  grep -qx -- "package --stage qa" "${STUB_LOG}/sls.log"
+  grep -qx -- "package --stage qa --package .serverless" "${STUB_LOG}/sls.log"
 }
 
 @test "passes PACKAGE_REGION as --region" {
   PACKAGE_REGION=ap-southeast-2 package
   [ "$status" -eq 0 ]
-  grep -qx -- "package --stage dev --region ap-southeast-2" "${STUB_LOG}/sls.log"
+  grep -qx -- "package --stage dev --package .serverless --region ap-southeast-2" "${STUB_LOG}/sls.log"
 }
 
 @test "rejects an invalid PACKAGE_REGION" {
