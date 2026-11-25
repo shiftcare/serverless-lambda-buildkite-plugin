@@ -100,6 +100,23 @@ setup() {
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
 }
 
+@test "exits 2, not 1, when the scratch directory cannot be created" {
+  printf 'handler.js\nlib/util.js\n' >"$REF"
+  setup_stubs
+  stub mktemp 'exit 1'
+  run "$CHECK" "$ZIP" "$REF"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"cannot create a scratch directory"* ]]
+}
+
+@test "exits 2, not 1, when normalisation fails" {
+  printf 'handler.js\nlib/util.js\n' >"$REF"
+  setup_stubs
+  stub sort 'exit 1'
+  run "$CHECK" "$ZIP" "$REF"
+  [ "$status" -eq 2 ]
+}
+
 @test "exits 2 on wrong argument count" {
   run "$CHECK" "$ZIP"
   [ "$status" -eq 2 ]

@@ -26,6 +26,7 @@ printf "Framework Core: 2.72.3 (global)\n"'
 echo "$*" >>"$STUB_LOG/npm.log"
 [ "${NPM_STUB_EXIT:-0}" = 0 ] || exit "$NPM_STUB_EXIT"
 [ "${NPM_CREATES_DOTENV:-}" != 1 ] || echo "X=1" >.env
+[ -z "${NPM_LINKS_DIST:-}" ] || ln -s "$NPM_LINKS_DIST" dist
 if [ "$1" = ci ] && [ "${NO_LOCAL_SLS:-}" != 1 ]; then
   mkdir -p node_modules/.bin
   cp "$STUB_LOG/local-serverless" node_modules/.bin/serverless
@@ -195,6 +196,45 @@ package() {
   [[ "$output" != *"dist/demo.zip"* ]]
   [[ "$output" == *"dist/service-build-output.js"* ]]
   [ -f "${SVC}/dist/service-build-output.js" ]
+}
+
+@test "refuses a dist/ that resolves outside the checkout, before touching it" {
+  local outside="${BATS_TEST_TMPDIR}/outside"
+  mkdir -p "$outside"
+  echo "keep" >"${outside}/demo.zip"
+  ln -s "$outside" "${SVC}/dist"
+  package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"dist resolves outside the service checkout"* ]]
+  [ "$(cat "${outside}/demo.zip")" = "keep" ]
+  [ ! -f "${STUB_LOG}/npm.log" ]
+}
+
+@test "refuses a dist/ symlinked outside the checkout by npm ci, before writing" {
+  local outside="${BATS_TEST_TMPDIR}/outside"
+  mkdir -p "$outside"
+  NPM_LINKS_DIST="$outside" package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"dist resolves outside the service checkout"* ]]
+  [ ! -e "${outside}/demo.zip" ]
+  [ ! -f "${STUB_LOG}/buildkite-agent.log" ]
+}
+
+@test "refuses a symlinked dist/<SERVICE>.zip" {
+  mkdir -p "${SVC}/dist"
+  ln -s "${BATS_TEST_TMPDIR}/elsewhere.zip" "${SVC}/dist/demo.zip"
+  package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"dist/demo.zip is a symlink"* ]]
+  [ ! -e "${BATS_TEST_TMPDIR}/elsewhere.zip" ]
+}
+
+@test "allows a dist/ symlinked to a directory inside the checkout" {
+  mkdir -p "${SVC}/build"
+  ln -s build "${SVC}/dist"
+  package
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  [ -f "${SVC}/build/demo.zip" ]
 }
 
 @test "refuses to package when .env exists in the service root" {

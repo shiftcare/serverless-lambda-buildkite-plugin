@@ -8,7 +8,8 @@
 # Directory entries and the CI stamp ci.build.info.txt are ignored on both
 # sides. Prints a unified diff (- reference, + zip) on mismatch.
 # Exit: 0 match, 1 mismatch, 2 usage or read error.
-set -euo pipefail
+# -E: the ERR trap below must also fire inside functions (normalise).
+set -Eeuo pipefail
 
 usage() {
   echo "usage: check-zip-contents.sh [--raw] <zip> <reference-list>" >&2
@@ -27,7 +28,11 @@ reference="$2"
 [ -f "$reference" ] || { echo "check-zip-contents: reference list not found: ${reference}" >&2; exit 2; }
 command -v unzip >/dev/null 2>&1 || { echo "check-zip-contents: unzip not found" >&2; exit 2; }
 
-work="$(mktemp -d)"
+# Exit 1 means "contents differ" only: any other failure (scratch dir,
+# normalisation, an unexpected command error) exits 2. The diff's own status
+# is captured explicitly below, so it never reaches this trap.
+trap 'exit 2' ERR
+work="$(mktemp -d)" || { echo "check-zip-contents: cannot create a scratch directory" >&2; exit 2; }
 trap 'rm -rf -- "$work"' EXIT
 
 normalise() {

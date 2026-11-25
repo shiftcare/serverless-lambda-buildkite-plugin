@@ -60,6 +60,23 @@ for tool in node npm unzip yq zip; do
 done
 
 out="dist/${SERVICE}.zip"
+# The output must stay inside the checkout: a dist/ symlinked elsewhere would
+# make the cleanup below and the later copy act on another directory, and a
+# symlinked dist/<SERVICE>.zip would make the copy write through it. Checked
+# before the cleanup, and again before writing (npm ci may change dist/).
+check_output_path() {
+  if [ -e dist ] || [ -L dist ]; then
+    [ -d dist ] || fail "dist exists and is not a directory"
+    local dist_real
+    dist_real="$(cd dist && pwd -P)" || fail "cannot resolve dist"
+    case "${dist_real}/" in
+      "${root}/"*) ;;
+      *) fail "dist resolves outside the service checkout (${dist_real}); refusing to write there" ;;
+    esac
+  fi
+  [ ! -L "$out" ] || fail "${out} is a symlink; refusing to write through it"
+}
+check_output_path
 # A previous run's output would otherwise be picked up by Serverless's default
 # file selection and packaged into the new zip. Only this file is removed:
 # dist/ itself may hold the service's own build output.
@@ -207,6 +224,7 @@ stamp="${work}/ci.build.info.txt"
   echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >"$stamp"
 
+check_output_path
 mkdir -p dist
 cp "$zip_path" "$out"
 zip -q -j "$out" "$stamp"
