@@ -80,7 +80,8 @@ Packaging also refuses to start when the service root holds any `.env` or
 `.env.*` file, when `serverless.yml` sets `custom.dotenv.path` or
 `custom.dotenv.basePath`, or when it cannot check those options: `custom` or
 `custom.dotenv` is not a plain map (for example `${file(...)}`), the file uses
-any YAML anchor, alias or merge key (parsers resolve merges differently), or
+any YAML anchor, alias or merge key, in keys as well as values (parsers
+resolve these differently), or
 the config is not `serverless.yml`/`serverless.yaml` (see step
 3 below). No service commits such a file today.
 
@@ -136,8 +137,8 @@ into the zip. Then it:
 7. Uploads only `dist/<SERVICE>.zip` as a build artifact.
 
 No Docker and no Docker Hub are involved. Agents need Node 22 with npm on
-`PATH`, plus `zip`, `unzip` and `yq` v4 (the generator and the package step
-both use it).
+`PATH`, plus `zip`, `unzip` and `yq` v4.40.1 or later (the generator and the
+package step both use it).
 
 **Limits.** This removes credentials from the SDKs; it is not a sandbox.
 `AWS_EC2_METADATA_DISABLED` does not block the network path to IMDS, so code

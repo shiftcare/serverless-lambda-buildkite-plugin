@@ -230,11 +230,15 @@ package() {
   # shellcheck disable=SC2016  # literal Serverless variables
   for spec in 'custom: ${file(./c.yml)}|custom is not a plain map' \
     'custom:\n  dotenv: ${file(./d.yml)}|custom.dotenv is not a plain map' \
-    'x: &x\n  path: y\ncustom:\n  dotenv:\n    <<: *x|uses YAML anchors or merge keys' \
-    'x: &x\n  dotenv: {path: y}\ncustom:\n  <<: *x|uses YAML anchors or merge keys' \
-    'b: &b\n  custom:\n    dotenv: {path: y}\n<<: *b|uses YAML anchors or merge keys' \
-    '<<: {custom: {dotenv: {path: y}}}|uses YAML anchors or merge keys' \
-    'custom:\n  dotenv: {include: [A]}\nx: &unused 1|uses YAML anchors or merge keys'; do
+    'x: &x\n  path: y\ncustom:\n  dotenv:\n    <<: *x|uses YAML anchors, aliases or merge keys' \
+    'x: &x\n  dotenv: {path: y}\ncustom:\n  <<: *x|uses YAML anchors, aliases or merge keys' \
+    'b: &b\n  custom:\n    dotenv: {path: y}\n<<: *b|uses YAML anchors, aliases or merge keys' \
+    '<<: {custom: {dotenv: {path: y}}}|uses YAML anchors, aliases or merge keys' \
+    'custom:\n  !!merge foo: {dotenv: {path: y}}|uses YAML anchors, aliases or merge keys' \
+    'custom:\n  dotenv: {include: [A]}\nx: &unused 1|uses YAML anchors, aliases or merge keys' \
+    'x:\n  &p path: z\ncustom:\n  dotenv:\n    *p : y|uses YAML anchors, aliases or merge keys' \
+    'x:\n  &d dotenv: z\ncustom:\n  *d : {path: y}|uses YAML anchors, aliases or merge keys' \
+    'x:\n  &c custom: z\n*c : {dotenv: {path: y}}|uses YAML anchors, aliases or merge keys'; do
     printf 'service: demo\n%b\n' "${spec%%|*}" >"${SVC}/serverless.yml"
     package
     [ "$status" -eq 1 ] || { echo "accepted ${spec}"; return 1; }
