@@ -44,6 +44,39 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
+@test "--raw keeps listed paths that start with '#' or look blank" {
+  local src="${BATS_TEST_TMPDIR}/hashsrc" zip="${BATS_TEST_TMPDIR}/hash.zip"
+  mkdir -p "$src"
+  echo a >"$src/#notes.txt"
+  echo b >"$src/  #spaced"
+  echo c >"$src/plain.js"
+  (cd "$src" && zip -qr "$zip" .)
+  unzip -Z1 "$zip" >"$REF"
+  run "$CHECK" --raw "$zip" "$REF"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  # Without --raw the '#' paths are comments, so the zip has extra files.
+  run "$CHECK" "$zip" "$REF"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"+#notes.txt"* ]]
+}
+
+@test "--raw still reports a real difference" {
+  printf 'handler.js\nlib/missing.js\n' >"$REF"
+  run "$CHECK" --raw "$ZIP" "$REF"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"-lib/missing.js"* ]]
+}
+
+@test "--raw exits 2 on an unreadable reference" {
+  [ "$(id -u)" -ne 0 ] || skip "root can read a mode-000 file"
+  printf 'handler.js\n' >"$REF"
+  chmod 000 "$REF"
+  run "$CHECK" --raw "$ZIP" "$REF"
+  chmod 600 "$REF"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"cannot read"* ]]
+}
+
 @test "exits 2 on wrong argument count" {
   run "$CHECK" "$ZIP"
   [ "$status" -eq 2 ]

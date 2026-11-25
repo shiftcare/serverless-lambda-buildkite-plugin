@@ -1,18 +1,25 @@
 #!/usr/bin/env bash
-# Usage: check-zip-contents.sh <zip> <reference-list>
+# Usage: check-zip-contents.sh [--raw] <zip> <reference-list>
 #
-# Compares the file entries of <zip> with <reference-list> (one path per line;
-# blank lines and '#' comments ignored). Directory entries and the CI stamp
-# ci.build.info.txt are ignored on both sides. Prints a unified diff
-# (- reference, + zip) on mismatch.
+# Compares the file entries of <zip> with <reference-list> (one path per line).
+# By default the reference is an annotated list: blank lines, '#' comments and
+# carriage returns are ignored. With --raw it is an `unzip -Z1` listing, taken
+# verbatim, so paths that start with '#' or are blank-looking still count.
+# Directory entries and the CI stamp ci.build.info.txt are ignored on both
+# sides. Prints a unified diff (- reference, + zip) on mismatch.
 # Exit: 0 match, 1 mismatch, 2 usage or read error.
 set -euo pipefail
 
 usage() {
-  echo "usage: check-zip-contents.sh <zip> <reference-list>" >&2
+  echo "usage: check-zip-contents.sh [--raw] <zip> <reference-list>" >&2
   exit 2
 }
 
+raw=0
+if [ "${1:-}" = --raw ]; then
+  raw=1
+  shift
+fi
 [ "$#" -eq 2 ] || usage
 zip_file="$1"
 reference="$2"
@@ -38,11 +45,22 @@ fi
 normalise <"${work}/raw" >"${work}/zip"
 # A reference that passes -f can still be unreadable; that is a read error
 # (2), not a mismatch (1).
-if ! tr -d '\r' <"$reference" >"${work}/reference-raw"; then
+if [ "$raw" -eq 1 ]; then
+  read_ok=0
+  cp -- "$reference" "${work}/reference-raw" || read_ok=$?
+else
+  read_ok=0
+  tr -d '\r' <"$reference" >"${work}/reference-raw" || read_ok=$?
+fi
+if [ "$read_ok" -ne 0 ]; then
   echo "check-zip-contents: cannot read ${reference}" >&2
   exit 2
 fi
-awk 'NF && !/^[[:space:]]*#/' "${work}/reference-raw" | normalise >"${work}/reference"
+if [ "$raw" -eq 1 ]; then
+  normalise <"${work}/reference-raw" >"${work}/reference"
+else
+  awk 'NF && !/^[[:space:]]*#/' "${work}/reference-raw" | normalise >"${work}/reference"
+fi
 
 status=0
 diff -u -L reference -L zip "${work}/reference" "${work}/zip" || status=$?

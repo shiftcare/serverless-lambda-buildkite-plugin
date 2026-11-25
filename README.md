@@ -181,12 +181,15 @@ Compare a Buildkite zip with the artifact CircleCI currently produces:
 
 ```bash
 unzip -Z1 circleci-build.zip > reference.txt
-scripts/serverless/check-zip-contents.sh dist/example-service.zip reference.txt
+scripts/serverless/check-zip-contents.sh --raw dist/example-service.zip reference.txt
 ```
 
-The check ignores directory entries, `ci.build.info.txt`, blank lines and `#`
-comments. It exits 0 on a match, 1 on a difference (with a unified diff:
-`-` reference, `+` zip) and 2 on a usage error.
+The check ignores directory entries and `ci.build.info.txt` on both sides.
+`--raw` takes the reference as an `unzip -Z1` listing, verbatim. Without it,
+the reference is an annotated list: blank lines, `#` comments and carriage
+returns are ignored, so a real path starting with `#` would be dropped. It
+exits 0 on a match, 1 on a difference (with a unified diff: `-` reference,
+`+` zip) and 2 on a usage or read error.
 
 ## Running locally
 
