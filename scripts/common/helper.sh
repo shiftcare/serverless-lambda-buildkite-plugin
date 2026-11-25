@@ -93,10 +93,21 @@ replaceValuesInTemplate() {
       "$file" || return 1
   done
 
-  if grep -Eq '@@[A-Z0-9_]+@@' "$file"; then
-    _helper_err "unreplaced placeholder(s) in ${file}: $(grep -Eo '@@[A-Z0-9_]+@@' "$file" | sort -u | tr '\n' ' ')"
-    return 1
-  fi
+  # grep exits 1 when nothing matches; anything higher means the scan itself
+  # failed, and the template must not be merged unchecked.
+  local scan_rc=0
+  grep -Eq '@@[A-Z0-9_]+@@' "$file" || scan_rc=$?
+  case "$scan_rc" in
+    0)
+      _helper_err "unreplaced placeholder(s) in ${file}: $(grep -Eo '@@[A-Z0-9_]+@@' "$file" | sort -u | tr '\n' ' ')"
+      return 1
+      ;;
+    1) ;;
+    *)
+      _helper_err "placeholder scan of ${file} failed (grep exit ${scan_rc})"
+      return 1
+      ;;
+  esac
 }
 
 # addTemplate <name> [KEY=VALUE ...] — append templates/<name>.yml, with

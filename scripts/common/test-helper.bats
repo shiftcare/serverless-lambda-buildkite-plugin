@@ -108,6 +108,19 @@ b" "QUEUE=tiny"
   [[ "$output" == *"@@QUEUE@@"* ]]
 }
 
+@test "replaceValuesInTemplate fails when the placeholder scan errors" {
+  # grep -Eq exits 2 (a read or matcher error); other greps run normally.
+  REAL_GREP="$(type -P grep)"
+  export REAL_GREP
+  # shellcheck disable=SC2016  # stub body expands at stub run time
+  stub grep '
+if [ "${1:-}" = "-Eq" ]; then exit 2; fi
+exec "$REAL_GREP" "$@"'
+  run replaceValuesInTemplate "$TEMPLATE" "VALUE=prod" "QUEUE=tiny"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"placeholder scan of"*"failed (grep exit 2)"* ]]
+}
+
 @test "replaceValuesInTemplate fails on a missing file" {
   run replaceValuesInTemplate "${BATS_TEST_TMPDIR}/nope.yml" "VALUE=x"
   [ "$status" -eq 1 ]

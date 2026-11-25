@@ -36,7 +36,13 @@ if ! unzip -Z1 "$zip_file" >"${work}/raw"; then
   exit 2
 fi
 normalise <"${work}/raw" >"${work}/zip"
-tr -d '\r' <"$reference" | awk 'NF && !/^[[:space:]]*#/' | normalise >"${work}/reference"
+# A reference that passes -f can still be unreadable; that is a read error
+# (2), not a mismatch (1).
+if ! tr -d '\r' <"$reference" >"${work}/reference-raw"; then
+  echo "check-zip-contents: cannot read ${reference}" >&2
+  exit 2
+fi
+awk 'NF && !/^[[:space:]]*#/' "${work}/reference-raw" | normalise >"${work}/reference"
 
 status=0
 diff -u -L reference -L zip "${work}/reference" "${work}/zip" || status=$?

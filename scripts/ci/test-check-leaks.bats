@@ -117,6 +117,23 @@ docs.md:example ${ACCOUNT_ID}"
   [[ "$output" == *"docs.md:1:"* ]]
 }
 
+@test "flags a binary file that matches, by path only, despite the allowlist" {
+  printf 'x\000y %s\n' "$ACCOUNT_ID" >"${REPO}/blob.bin"
+  track blob.bin
+  put .leak-allowlist "blob.bin:y"
+  run "$CHECK" "$REPO"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"blob.bin: binary file matches"* ]]
+  [[ "$output" != *"$ACCOUNT_ID"* ]]
+}
+
+@test "a binary file without a match passes" {
+  printf 'x\000y\n' >"${REPO}/blob.bin"
+  track blob.bin
+  run "$CHECK" "$REPO"
+  [ "$status" -eq 0 ]
+}
+
 @test "runs from a subdirectory of the repo" {
   mkdir -p "${REPO}/sub"
   put a.txt "$ACCOUNT_ID"

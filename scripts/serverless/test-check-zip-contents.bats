@@ -61,6 +61,16 @@ setup() {
   [ "$status" -eq 2 ]
 }
 
+@test "exits 2, not 1, on a reference that exists but cannot be read" {
+  [ "$(id -u)" -ne 0 ] || skip "root can read a mode-000 file"
+  printf 'handler.js\nlib/util.js\n' >"$REF"
+  chmod 000 "$REF"
+  run "$CHECK" "$ZIP" "$REF"
+  chmod 600 "$REF"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"cannot read"* ]]
+}
+
 @test "exits 2 on a file that is not a zip" {
   printf 'handler.js\n' >"$REF"
   run "$CHECK" "$REF" "$REF"

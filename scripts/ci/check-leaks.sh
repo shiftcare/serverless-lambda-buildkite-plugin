@@ -6,6 +6,8 @@
 # ID. To accept a reviewed false positive, add "<path>:<fixed string>" to
 # <repo>/.leak-allowlist: hits in <path> on lines containing <fixed string>
 # are ignored. Prints path:line and the kind of hit, never the matched text.
+# A binary file that matches any pattern fails by path alone and cannot be
+# allowlisted.
 # Exit: 0 clean, 1 hits found, 2 usage or git error.
 set -euo pipefail
 
@@ -18,14 +20,43 @@ arn_re='arn'':aws'
 key_re='(AKIA|ASIA)[A-Z0-9]{16}'
 id_re='[0-9]{12}'
 
-rc=0
-hits="$(git -C "$root" grep -n -I -E -e "$id_re" -e "$arn_re" -e "$key_re" \
-  -- . ':(exclude).leak-allowlist')" || rc=$?
-if [ "$rc" -gt 1 ]; then
-  echo "check-leaks: git grep failed (exit ${rc})" >&2
-  exit 2
+scan() {
+  local out rc=0
+  out="$(git -C "$root" grep "$@" -E -e "$id_re" -e "$arn_re" -e "$key_re" \
+    -- . ':(exclude).leak-allowlist')" || rc=$?
+  if [ "$rc" -gt 1 ]; then
+    echo "check-leaks: git grep failed (exit ${rc})" >&2
+    exit 2
+  fi
+  printf '%s' "$out"
+}
+
+# Text files are checked line by line below. Binary files (which `-I` skips)
+# cannot be, so any binary file that matches a pattern fails by path and
+# cannot be allowlisted.
+hits="$(scan -n -I)"
+matching="$(scan -l)"
+text_matching="$(scan -l -I)"
+binary="$(LC_ALL=C comm -23 \
+  <(printf '%s\n' "$matching" | LC_ALL=C sort) \
+  <(printf '%s\n' "$text_matching" | LC_ALL=C sort) | sed '/^$/d')"
+
+failed=0
+if [ -n "$binary" ]; then
+  while IFS= read -r f; do
+    printf '%s: binary file matches (binary files are not checked line by line or allowlisted)\n' "$f"
+  done <<<"$binary"
+  failed=1
 fi
-[ -n "$hits" ] || { echo "check-leaks: clean"; exit 0; }
+report_failure() {
+  echo "check-leaks: possible account IDs, ARNs or access keys found (see above)" >&2
+  exit 1
+}
+if [ -z "$hits" ]; then
+  [ "$failed" -eq 0 ] || report_failure
+  echo "check-leaks: clean"
+  exit 0
+fi
 
 allowlist="${root}/.leak-allowlist"
 [ -f "$allowlist" ] || allowlist=/dev/null
@@ -69,5 +100,6 @@ printf '%s\n' "$hits" | awk -v allow="$allowlist" '
     found = 1
   }
   END { exit found }
-' || { echo "check-leaks: possible account IDs, ARNs or access keys found (see above)" >&2; exit 1; }
+' || report_failure
+[ "$failed" -eq 0 ] || report_failure
 echo "check-leaks: clean"
