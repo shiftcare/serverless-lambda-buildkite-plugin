@@ -140,6 +140,15 @@ docs.md:example "
   done
 }
 
+@test "fails on a tracked symlink, whose target text git grep skips" {
+  ln -s "/accounts/${ACCOUNT_ID}" "${REPO}/link"
+  track link
+  run "$CHECK" "$REPO"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"link: tracked symlink"* ]]
+  [[ "$output" != *"$ACCOUNT_ID"* ]]
+}
+
 @test "a colon path with no hit still fails" {
   put 'a:b.txt' "nothing here"
   run "$CHECK" "$REPO"

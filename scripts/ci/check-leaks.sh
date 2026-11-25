@@ -7,7 +7,7 @@
 # <repo>/.leak-allowlist: hits in <path> on lines containing <fixed string>
 # are ignored. The allowlist itself is scanned and never exempt, so <fixed
 # string> must be surrounding context, not the flagged value. Tracked paths
-# containing ':' fail. Prints path:line and the kind of hit, never the
+# containing ':' and tracked symlinks fail. Prints path:line and the kind of hit, never the
 # matched text.
 # A binary file (as git classifies it) that matches any pattern fails by path
 # alone and cannot be allowlisted. That match is stricter than the text one:
@@ -57,6 +57,17 @@ if [ -n "$colon_paths" ]; then
   while IFS= read -r f; do
     printf "%s: path contains ':' (cannot be matched to the allowlist unambiguously; rename it)\n" "$f"
   done <<<"$colon_paths"
+  failed=1
+fi
+# git grep skips symlinks, but the commit stores each link's target text, which
+# is public too. Refuse tracked symlinks (mode 120000) rather than scan them.
+symlinks="$(git -C "$root" ls-files -s -z | tr '\0' '\n' |
+  LC_ALL=C awk '$1 == "120000" { sub(/^[^\t]*\t/, ""); print }')" ||
+  { echo "check-leaks: git ls-files failed" >&2; exit 2; }
+if [ -n "$symlinks" ]; then
+  while IFS= read -r f; do
+    printf '%s: tracked symlink (its target text is not scanned; replace it with a file)\n' "$f"
+  done <<<"$symlinks"
   failed=1
 fi
 if [ -n "$binary" ]; then

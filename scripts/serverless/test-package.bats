@@ -59,15 +59,20 @@ case "$1" in
     # Like Serverless: the service zip, plus the state file naming it as
     # package.artifact. layer-only: only a layer zip, artifact left empty;
     # other-artifact: the state names a different (prebuilt) artifact.
-    zipname=demo.zip artifact=demo.zip
+    zipname=demo.zip artifact=demo.zip layers="{}" functions="{\"fn\":{}}" individually=false
     case "${FAKE_ZIP_MODE:-ok}" in
       layer-only) zipname=layer.zip artifact= ;;
       other-artifact) artifact=prebuilt.zip ;;
       artifact-named-like-layer) zipname=layer.zip artifact=layer.zip ;;
+      same-name-layer) layers="{\"demo\":{\"path\":\"layer\"}}" ;;
+      individually) individually=true ;;
+      fn-artifact) functions="{\"fn\":{\"package\":{\"artifact\":\"prebuilt.zip\"}}}" ;;
+      fn-individually) functions="{\"fn\":{\"package\":{\"individually\":true}}}" ;;
     esac
     (cd "$src" && zip -qr "$OLDPWD/.serverless/$zipname" .)
     [ "${FAKE_ZIP_MODE:-ok}" = no-state ] ||
-      printf "{\"service\":{\"service\":\"demo\"},\"package\":{\"artifact\":\"%s\"}}\n" "$artifact" >.serverless/serverless-state.json
+      printf "{\"service\":{\"service\":\"demo\",\"layers\":%s,\"functions\":%s},\"package\":{\"individually\":%s,\"artifact\":\"%s\"}}\n" \
+        "$layers" "$functions" "$individually" "$artifact" >.serverless/serverless-state.json
     [ "${FAKE_ZIP_MODE:-ok}" != two ] || cp .serverless/demo.zip .serverless/other.zip
     exit "${SLS_STUB_EXIT:-0}"
     ;;
@@ -432,6 +437,18 @@ package() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"layer.zip is not the service package Serverless builds (demo.zip)"* ]]
   [ ! -f "${STUB_LOG}/buildkite-agent.log" ]
+}
+
+@test "refuses settings that make or substitute another zip, even with a matching name" {
+  local spec
+  for spec in 'same-name-layer|layers' 'individually|package.individually' \
+    'fn-artifact|function-level' 'fn-individually|function-level'; do
+    rm -rf "${SVC}/.serverless" "${SVC}/dist" "${STUB_LOG}/buildkite-agent.log"
+    FAKE_ZIP_MODE="${spec%%|*}" package
+    [ "$status" -eq 1 ] || { echo "accepted ${spec}"; return 1; }
+    [[ "$output" == *"shows ${spec#*|}"* ]] || { echo "${spec}: ${output}"; return 1; }
+    [ ! -f "${STUB_LOG}/buildkite-agent.log" ]
+  done
 }
 
 @test "fails without the Serverless state file" {

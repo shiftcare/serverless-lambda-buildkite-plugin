@@ -149,7 +149,7 @@ esac
 # package was built (e.g. only a layer was packaged).
 state=.serverless/serverless-state.json
 [ -f "$state" ] || fail "${state} not found; cannot confirm ${zip_path} is the service package"
-artifact="$(yq -p json '.package.artifact // ""' "$state")" ||
+artifact="$(yq -p json -o yaml '.package.artifact // ""' "$state")" ||
   fail "cannot read package.artifact from ${state}"
 [ -n "$artifact" ] ||
   fail "Serverless built no service package (package.artifact is empty in ${state}); ${zip_path} is not the service artifact"
@@ -158,11 +158,27 @@ artifact="$(yq -p json '.package.artifact // ""' "$state")" ||
 # Only a file name is recorded, so also require the name Serverless gives the
 # service package it builds (<service>.zip): a user-set package.artifact named
 # like a layer zip would otherwise pass.
-sls_service="$(yq -p json '.service.service // ""' "$state")" ||
+sls_service="$(yq -p json -o yaml '.service.service // ""' "$state")" ||
   fail "cannot read service.service from ${state}"
 if [ -z "$sls_service" ] || [ "$artifact" != "${sls_service}.zip" ]; then
   fail "${artifact} is not the service package Serverless builds (${sls_service:-?}.zip); a prebuilt package.artifact is not supported"
 fi
+# A name match alone does not prove Serverless built this zip: a layer or an
+# individually packaged function can produce a zip of any name, and a prebuilt
+# package.artifact is recorded the same way. Refuse every setting that makes
+# or substitutes another zip; with none of them, Serverless's own service build
+# (packageAll) is the only source of a zip in .serverless/ (it is emptied at
+# package start, and a prebuilt service artifact leaves it with no zip).
+# shellcheck disable=SC2016  # yq expression, not shell
+other_zip_rules='[
+  (.service.layers // {} | select(length > 0) | . = "layers"),
+  (.package.individually // false | select(. == true) | . = "package.individually"),
+  ([.service.functions // {} | .[] | .package // {} | select((.individually == true) or ((.artifact // "") != ""))] | select(length > 0) | . = "function-level package.individually or package.artifact")
+] | join(", ")'
+other_zips="$(yq -p json -o yaml "$other_zip_rules" "$state")" ||
+  fail "cannot read packaging settings from ${state}"
+[ -z "$other_zips" ] ||
+  fail "${state} shows ${other_zips}; only a single service package built by Serverless is supported"
 
 # Resolved config can carry secrets; none of it may ship in the code zip.
 # Also refuse our own output path, in case a previous artifact still got in.

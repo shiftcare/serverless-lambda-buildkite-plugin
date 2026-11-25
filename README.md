@@ -127,9 +127,14 @@ into the zip. Then it:
 4. Expects exactly one `.serverless/*.zip`, and requires it to be the service
    package Serverless records as `package.artifact` in
    `.serverless/serverless-state.json` under the name Serverless gives the
-   service package it builds, `<service>.zip` (so a lone layer zip, or a
-   prebuilt `package.artifact`, is refused). Individually packaged functions
-   are not supported.
+   service package it builds, `<service>.zip`. It also refuses when the state
+   shows layers, `package.individually`, or a function-level
+   `package.individually` or `package.artifact`: those can make or substitute
+   a zip under any name. Serverless empties `.serverless/` at package start,
+   and a prebuilt service `package.artifact` leaves no zip there, so the one
+   zip left can only be Serverless's own service build. Layers are
+   unsupported anyway: Serverless v2 calls AWS when packaging a service with
+   layers (even a prebuilt one), which fails without credentials.
 5. Refuses the zip if it contains `.serverless/`, `.env` (a file, or anything
    under a `.env/` directory), `.env.*`,
    `cloudformation-template-*.json`, `serverless-state.json` or
@@ -213,7 +218,8 @@ allowlist is public and is scanned like any other file, with no exemptions, so
 `<fixed string>` must be surrounding context (e.g. `docs.md:example account`),
 never the flagged value itself. A hit on a line holding nothing but the value,
 or in a file whose path contains a 12-digit run, cannot be narrowly
-allowlisted; change the file instead. Tracked paths containing `:` fail the check,
+allowlisted; change the file instead. Tracked symlinks fail the check (git
+grep skips them, but their target text is public). Tracked paths containing `:` fail the check,
 since hits are reported as `path:line`. Binary files cannot be checked
 line by line: a tracked file git classifies as binary fails by path when it
 matches any pattern (including the all-zeros placeholder or a longer digit
