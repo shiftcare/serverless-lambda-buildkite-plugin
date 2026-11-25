@@ -27,6 +27,7 @@ echo "$*" >>"$STUB_LOG/npm.log"
 [ "${NPM_STUB_EXIT:-0}" = 0 ] || exit "$NPM_STUB_EXIT"
 [ "${NPM_CREATES_DOTENV:-}" != 1 ] || echo "X=1" >.env
 [ -z "${NPM_LINKS_DIST:-}" ] || ln -s "$NPM_LINKS_DIST" dist
+[ -z "${NPM_LINKS_OUT:-}" ] || { mkdir -p dist; ln -s "$NPM_LINKS_OUT" dist/demo.zip; }
 if [ "$1" = ci ] && [ "${NO_LOCAL_SLS:-}" != 1 ]; then
   mkdir -p node_modules/.bin
   cp "$STUB_LOG/local-serverless" node_modules/.bin/serverless
@@ -227,6 +228,14 @@ package() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"dist/demo.zip is a symlink"* ]]
   [ ! -e "${BATS_TEST_TMPDIR}/elsewhere.zip" ]
+}
+
+@test "refuses a dist/<SERVICE>.zip symlink created by npm ci, before writing" {
+  NPM_LINKS_OUT="${BATS_TEST_TMPDIR}/elsewhere.zip" package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"dist/demo.zip is a symlink"* ]]
+  [ ! -e "${BATS_TEST_TMPDIR}/elsewhere.zip" ]
+  [ ! -f "${STUB_LOG}/buildkite-agent.log" ]
 }
 
 @test "allows a dist/ symlinked to a directory inside the checkout" {

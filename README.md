@@ -107,7 +107,9 @@ into the zip. Then it:
    therefore have no credential source. Then it exports `AWS_ACCOUNT_ID` (the
    placeholder) and `SECRETS_PROVIDER_MODE=placeholder`.
 2. Deletes a previous `dist/<SERVICE>.zip` (only that file), so Serverless
-   cannot package an old artifact into the new one.
+   cannot package an old artifact into the new one. It refuses a `dist/`
+   that resolves outside the checkout, or a symlinked `dist/<SERVICE>.zip`,
+   both here and again before writing the output.
 3. Runs `npm ci --include=dev` (Serverless is a dev dependency, and a
    passed-through `NODE_ENV=production` would otherwise omit it), then the
    lockfile-pinned, service-local Serverless at

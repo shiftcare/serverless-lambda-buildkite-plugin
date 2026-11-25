@@ -68,7 +68,7 @@ check_output_path() {
   if [ -e dist ] || [ -L dist ]; then
     [ -d dist ] || fail "dist exists and is not a directory"
     local dist_real
-    dist_real="$(cd dist && pwd -P)" || fail "cannot resolve dist"
+    dist_real="$(cd -P -- ./dist && pwd -P)" || fail "cannot resolve dist"
     case "${dist_real}/" in
       "${root}/"*) ;;
       *) fail "dist resolves outside the service checkout (${dist_real}); refusing to write there" ;;
@@ -226,6 +226,9 @@ stamp="${work}/ci.build.info.txt"
 
 check_output_path
 mkdir -p dist
+# Remove whatever npm ci or Serverless left at the output path, so cp creates
+# a new file rather than writing through an existing one (e.g. a hard link).
+rm -f -- "$out"
 cp "$zip_path" "$out"
 zip -q -j "$out" "$stamp"
 
