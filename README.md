@@ -79,8 +79,9 @@ are needed per service before migrating:
 Packaging also refuses to start when the service root holds any `.env` or
 `.env.*` file, when `serverless.yml` sets `custom.dotenv.path` or
 `custom.dotenv.basePath`, or when it cannot check those options: `custom` or
-`custom.dotenv` is not a plain map (for example `${file(...)}`), uses a YAML
-merge key, or the config is not `serverless.yml`/`serverless.yaml` (see step
+`custom.dotenv` is not a plain map (for example `${file(...)}`), the file uses
+any YAML anchor, alias or merge key (parsers resolve merges differently), or
+the config is not `serverless.yml`/`serverless.yaml` (see step
 3 below). No service commits such a file today.
 
 Buildkite does not pass the bootstrap step's `env` on to the steps it uploads.

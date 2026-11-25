@@ -19,6 +19,10 @@ reference="$2"
 [ -f "$zip_file" ] || { echo "check-zip-contents: zip not found: ${zip_file}" >&2; exit 2; }
 [ -f "$reference" ] || { echo "check-zip-contents: reference list not found: ${reference}" >&2; exit 2; }
 command -v unzip >/dev/null 2>&1 || { echo "check-zip-contents: unzip not found" >&2; exit 2; }
+# unzip would read a dash-leading relative path as an option.
+case "$zip_file" in
+  -*) zip_file="./${zip_file}" ;;
+esac
 
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT

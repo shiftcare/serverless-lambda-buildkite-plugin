@@ -87,7 +87,10 @@ done
 shopt -u nullglob
 # The option check reads literal YAML, so anything that could hide those
 # options from it is refused too: a custom or custom.dotenv that is not a
-# plain map (e.g. ${file(...)}), a YAML merge key, or a non-YAML config.
+# plain map (e.g. ${file(...)}), any YAML anchor or merge key (yq versions and
+# Serverless's own YAML loader resolve merges differently, so the check could
+# see a different mapping from the plugin; every alias needs an anchor), or a
+# non-YAML config.
 for config in serverless.json serverless.js serverless.cjs serverless.mjs serverless.ts; do
   [ ! -e "$config" ] ||
     fail "${config} found; only serverless.yml is supported (its dotenv options cannot be checked)"
@@ -96,10 +99,10 @@ done
 # Messages are set with `. = "..."`: a bare string literal after a pipe is
 # emitted by yq even when the left side yields nothing.
 dotenv_rules='[
+  ([(., ..) | select((anchor != "") or ((key | tag) == "!!merge") or (key == "<<"))] | select(length > 0) | . = "uses YAML anchors or merge keys"),
   (.custom | select((tag != "!!map") and (tag != "!!null")) | . = "custom is not a plain map"),
-  (.custom | select(tag == "!!map") | keys | .[] | select(. == "<<") | . = "custom uses a merge key"),
   (.custom | select(tag == "!!map") | .dotenv | select((tag != "!!map") and (tag != "!!null")) | . = "custom.dotenv is not a plain map"),
-  (.custom.dotenv | select(tag == "!!map") | keys | .[] | select((. == "path") or (. == "basePath") or (. == "<<")) | . = "custom.dotenv sets " + .)
+  (.custom.dotenv | select(tag == "!!map") | keys | .[] | select((. == "path") or (. == "basePath")) | . = "custom.dotenv sets " + .)
 ] | join("; ")'
 for config in serverless.yml serverless.yaml; do
   [ -f "$config" ] || continue

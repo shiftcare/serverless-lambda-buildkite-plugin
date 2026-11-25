@@ -36,6 +36,14 @@ setup() {
   [[ "$output" == *"+lib/util.js"* ]]
 }
 
+@test "accepts a relative zip path that starts with a dash" {
+  printf 'handler.js\nlib/util.js\n' >"$REF"
+  cp "$ZIP" "${BATS_TEST_TMPDIR}/-svc.zip"
+  cd "$BATS_TEST_TMPDIR" || return 1
+  run "$CHECK" -svc.zip "$REF"
+  [ "$status" -eq 0 ]
+}
+
 @test "exits 2 on wrong argument count" {
   run "$CHECK" "$ZIP"
   [ "$status" -eq 2 ]
