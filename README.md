@@ -167,6 +167,9 @@ infrastructure, outside this repo.
   `serverless-lambda-pipeline/`, staged in a temp dir and never in the service
   checkout. Later steps download them into their own temp dir, so they run the
   same script version as the generator.
+- Retrying the bootstrap step is safe. If an earlier attempt already uploaded
+  the pipeline (the build has a step keyed `package`), the retry uploads
+  nothing and exits 0. To rerun packaging, retry the package step itself.
 - The pipeline is uploaded with
   `buildkite-agent pipeline upload --no-interpolation`. Template commands are
   plain bash (`$VAR`, not `$$VAR`). Substituted values reach the agent verbatim.

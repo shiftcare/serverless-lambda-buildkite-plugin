@@ -77,6 +77,21 @@ setup() {
   [[ "$output" == *"cannot read"* ]]
 }
 
+@test "compares the exact zip named, even with wildcard characters in its name" {
+  local d="${BATS_TEST_TMPDIR}/wild"
+  mkdir -p "$d/a" "$d/b"
+  echo a >"$d/a/only-in-bracket.js"
+  echo b >"$d/b/only-in-plain.js"
+  (cd "$d/a" && zip -qr "../build[1].zip" .)
+  (cd "$d/b" && zip -qr "../build1.zip" .)
+  printf 'only-in-bracket.js\n' >"$REF"
+  run "$CHECK" --raw "$d/build[1].zip" "$REF"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  printf 'only-in-plain.js\n' >"$REF"
+  run "$CHECK" --raw "$d/build[1].zip" "$REF"
+  [ "$status" -eq 1 ]
+}
+
 @test "exits 2 on wrong argument count" {
   run "$CHECK" "$ZIP"
   [ "$status" -eq 2 ]

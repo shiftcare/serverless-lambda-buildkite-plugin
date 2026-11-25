@@ -29,6 +29,19 @@ if [ "${PIPELINE_DRY_RUN:-}" = "1" ]; then
   exit 0
 fi
 
+# A retried bootstrap job must not upload again. If an earlier attempt already
+# uploaded the pipeline, this build holds its steps (the package step has the
+# fixed key "package"), and a second upload with the same key is rejected.
+# Scripts are uploaded before the pipeline, so they are in place too. Any
+# lookup failure (no such step, or an API error) falls through to the upload,
+# which still fails loudly on a real duplicate.
+build_args=()
+[ -z "${BUILDKITE_BUILD_ID:-}" ] || build_args=(--build "$BUILDKITE_BUILD_ID")
+if state="$(buildkite-agent step get state --step package ${build_args[@]+"${build_args[@]}"} 2>/dev/null)"; then
+  echo "generate_pipeline: this build already has the package step (state: ${state}) from an earlier attempt; not uploading again. Retry the package step itself to rerun it."
+  exit 0
+fi
+
 generateArtefacts
 # --no-interpolation: step commands are plain bash ($VAR, not $$VAR), and
 # substituted values must reach the agent verbatim.

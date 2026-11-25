@@ -29,6 +29,8 @@ stub_buildkite_agent() {
 printf "%s\t%s\n" "$PWD" "$*" >>"$STUB_LOG/buildkite-agent.log"
 mkdir -p "$STUB_LOG/captured"
 case "$1 $2" in
+  # No step exists unless the test says so (STUB_STEP_STATE=<state>).
+  "step get") [ -n "${STUB_STEP_STATE:-}" ] || exit 1; echo "$STUB_STEP_STATE"; exit 0 ;;
   "pipeline upload") cp "${!#}" "$STUB_LOG/captured/pipeline.yml" ;;
   "artifact upload") [ -f "$3" ] && cp "$3" "$STUB_LOG/captured/" ;;
 esac

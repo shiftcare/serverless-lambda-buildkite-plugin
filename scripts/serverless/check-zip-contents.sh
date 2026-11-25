@@ -26,10 +26,6 @@ reference="$2"
 [ -f "$zip_file" ] || { echo "check-zip-contents: zip not found: ${zip_file}" >&2; exit 2; }
 [ -f "$reference" ] || { echo "check-zip-contents: reference list not found: ${reference}" >&2; exit 2; }
 command -v unzip >/dev/null 2>&1 || { echo "check-zip-contents: unzip not found" >&2; exit 2; }
-# unzip would read a dash-leading relative path as an option.
-case "$zip_file" in
-  -*) zip_file="./${zip_file}" ;;
-esac
 
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
@@ -38,7 +34,15 @@ normalise() {
   awk '!/\/$/ && $0 != "ci.build.info.txt"' | LC_ALL=C sort -u
 }
 
-if ! unzip -Z1 "$zip_file" >"${work}/raw"; then
+# unzip treats wildcard characters in the archive name as a pattern (so
+# build[1].zip can open build1.zip) and a leading '-' as an option. List a
+# copy under a fixed, plain name instead. cat, not cp: the copy must not
+# inherit the source's permissions.
+if ! cat -- "$zip_file" >"${work}/archive.zip"; then
+  echo "check-zip-contents: cannot read ${zip_file}" >&2
+  exit 2
+fi
+if ! unzip -Z1 "${work}/archive.zip" >"${work}/raw"; then
   echo "check-zip-contents: cannot list ${zip_file}" >&2
   exit 2
 fi

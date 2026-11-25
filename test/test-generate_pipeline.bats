@@ -27,21 +27,34 @@ generate_pipeline() {
   [ ! -f "${STUB_LOG}/buildkite-agent.log" ]
 }
 
-@test "uploads the scripts then the pipeline without interpolation" {
-  generate_pipeline
+@test "checks for an earlier upload, then uploads the scripts and the pipeline without interpolation" {
+  BUILDKITE_BUILD_ID=build-123 generate_pipeline
   [ "$status" -eq 0 ]
-  [ "$(wc -l <"${STUB_LOG}/buildkite-agent.log" | tr -d ' ')" = "2" ]
+  [ "$(wc -l <"${STUB_LOG}/buildkite-agent.log" | tr -d ' ')" = "3" ]
   run cut -f2 "${STUB_LOG}/buildkite-agent.log"
-  [ "${lines[0]}" = "artifact upload serverless-lambda-pipeline/**/*.sh" ]
-  [[ "${lines[1]}" == "pipeline upload --no-interpolation ${TMPDIR}/"*"/pipeline.yml" ]]
+  [ "${lines[0]}" = "step get state --step package --build build-123" ]
+  [ "${lines[1]}" = "artifact upload serverless-lambda-pipeline/**/*.sh" ]
+  [[ "${lines[2]}" == "pipeline upload --no-interpolation ${TMPDIR}/"*"/pipeline.yml" ]]
   [ "$(yq '.steps[0].key' "${STUB_LOG}/captured/pipeline.yml")" = "package" ]
+}
+
+@test "a retried bootstrap uploads nothing when the package step already exists" {
+  local state
+  for state in waiting running passed failed; do
+    rm -f "${STUB_LOG}/buildkite-agent.log"
+    STUB_STEP_STATE="$state" generate_pipeline
+    [ "$status" -eq 0 ] || { echo "${state}: ${output}"; return 1; }
+    [[ "$output" == *"already has the package step (state: ${state})"* ]]
+    run grep -c 'upload' "${STUB_LOG}/buildkite-agent.log"
+    [ "$output" = "0" ]
+  done
 }
 
 @test "works in a mktemp dir under TMPDIR and removes it on exit" {
   generate_pipeline
   [ "$status" -eq 0 ]
   local workdir
-  workdir="$(head -n 1 "${STUB_LOG}/buildkite-agent.log" | cut -f1)"
+  workdir="$(grep -m 1 'artifact upload' "${STUB_LOG}/buildkite-agent.log" | cut -f1)"
   [[ "$workdir" == "${TMPDIR}/"* ]]
   [ ! -e "$workdir" ]
   [ -z "$(ls -A "$TMPDIR")" ]
