@@ -92,6 +92,14 @@ setup() {
   [ "$status" -eq 1 ]
 }
 
+@test "compares a zip named '-' rather than reading stdin" {
+  printf 'handler.js\nlib/util.js\n' >"$REF"
+  cp "$ZIP" "${BATS_TEST_TMPDIR}/-"
+  cd "$BATS_TEST_TMPDIR" || return 1
+  run "$CHECK" - "$REF" </dev/null
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+}
+
 @test "exits 2 on wrong argument count" {
   run "$CHECK" "$ZIP"
   [ "$status" -eq 2 ]

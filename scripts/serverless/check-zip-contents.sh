@@ -36,9 +36,9 @@ normalise() {
 
 # unzip treats wildcard characters in the archive name as a pattern (so
 # build[1].zip can open build1.zip) and a leading '-' as an option. List a
-# copy under a fixed, plain name instead. cat, not cp: the copy must not
-# inherit the source's permissions.
-if ! cat -- "$zip_file" >"${work}/archive.zip"; then
+# copy under a fixed, plain name instead. Read it by redirection, so a file
+# literally named '-' is not taken as stdin.
+if ! cat <"$zip_file" >"${work}/archive.zip"; then
   echo "check-zip-contents: cannot read ${zip_file}" >&2
   exit 2
 fi

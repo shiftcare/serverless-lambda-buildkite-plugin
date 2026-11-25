@@ -11,7 +11,7 @@ setup() {
   mkdir -p "$CWD"
   cd "$CWD" || return 1
   export SERVICE=demo-svc
-  unset PIPELINE_DRY_RUN
+  unset PIPELINE_DRY_RUN STUB_STEP_STATE BUILDKITE_BUILD_ID BUILDKITE_RETRY_COUNT
 }
 
 generate_pipeline() {
@@ -27,22 +27,38 @@ generate_pipeline() {
   [ ! -f "${STUB_LOG}/buildkite-agent.log" ]
 }
 
-@test "checks for an earlier upload, then uploads the scripts and the pipeline without interpolation" {
-  BUILDKITE_BUILD_ID=build-123 generate_pipeline
+@test "uploads the scripts then the pipeline without interpolation" {
+  generate_pipeline
   [ "$status" -eq 0 ]
-  [ "$(wc -l <"${STUB_LOG}/buildkite-agent.log" | tr -d ' ')" = "3" ]
+  [ "$(wc -l <"${STUB_LOG}/buildkite-agent.log" | tr -d ' ')" = "2" ]
+  run cut -f2 "${STUB_LOG}/buildkite-agent.log"
+  [ "${lines[0]}" = "artifact upload serverless-lambda-pipeline/**/*.sh" ]
+  [[ "${lines[1]}" == "pipeline upload --no-interpolation ${TMPDIR}/"*"/pipeline.yml" ]]
+  [ "$(yq '.steps[0].key' "${STUB_LOG}/captured/pipeline.yml")" = "package" ]
+}
+
+@test "a first attempt never skips, even if a package step exists (duplicate must fail)" {
+  BUILDKITE_RETRY_COUNT=0 STUB_STEP_STATE=passed generate_pipeline
+  [ "$status" -eq 0 ]
+  run cut -f2 "${STUB_LOG}/buildkite-agent.log"
+  [[ "${lines[0]}" != "step get"* ]]
+  [[ "${lines[1]}" == "pipeline upload "* ]]
+}
+
+@test "a retried bootstrap checks the build, then uploads when no package step exists" {
+  BUILDKITE_RETRY_COUNT=1 BUILDKITE_BUILD_ID=build-123 generate_pipeline
+  [ "$status" -eq 0 ]
   run cut -f2 "${STUB_LOG}/buildkite-agent.log"
   [ "${lines[0]}" = "step get state --step package --build build-123" ]
   [ "${lines[1]}" = "artifact upload serverless-lambda-pipeline/**/*.sh" ]
-  [[ "${lines[2]}" == "pipeline upload --no-interpolation ${TMPDIR}/"*"/pipeline.yml" ]]
-  [ "$(yq '.steps[0].key' "${STUB_LOG}/captured/pipeline.yml")" = "package" ]
+  [[ "${lines[2]}" == "pipeline upload "* ]]
 }
 
 @test "a retried bootstrap uploads nothing when the package step already exists" {
   local state
   for state in waiting running passed failed; do
     rm -f "${STUB_LOG}/buildkite-agent.log"
-    STUB_STEP_STATE="$state" generate_pipeline
+    BUILDKITE_RETRY_COUNT=1 STUB_STEP_STATE="$state" generate_pipeline
     [ "$status" -eq 0 ] || { echo "${state}: ${output}"; return 1; }
     [[ "$output" == *"already has the package step (state: ${state})"* ]]
     run grep -c 'upload' "${STUB_LOG}/buildkite-agent.log"
@@ -54,7 +70,7 @@ generate_pipeline() {
   generate_pipeline
   [ "$status" -eq 0 ]
   local workdir
-  workdir="$(grep -m 1 'artifact upload' "${STUB_LOG}/buildkite-agent.log" | cut -f1)"
+  workdir="$(head -n 1 "${STUB_LOG}/buildkite-agent.log" | cut -f1)"
   [[ "$workdir" == "${TMPDIR}/"* ]]
   [ ! -e "$workdir" ]
   [ -z "$(ls -A "$TMPDIR")" ]
