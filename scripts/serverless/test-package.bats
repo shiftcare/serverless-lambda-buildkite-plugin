@@ -56,7 +56,17 @@ case "$1" in
     esac
     # Like Serverless, include whatever already sits under dist/ in the service.
     [ ! -d dist ] || cp -R dist "$src/"
-    (cd "$src" && zip -qr "$OLDPWD/.serverless/demo.zip" .)
+    # Like Serverless: the service zip, plus the state file naming it as
+    # package.artifact. layer-only: only a layer zip, artifact left empty;
+    # other-artifact: the state names a different (prebuilt) artifact.
+    zipname=demo.zip artifact=demo.zip
+    case "${FAKE_ZIP_MODE:-ok}" in
+      layer-only) zipname=layer.zip artifact= ;;
+      other-artifact) artifact=prebuilt.zip ;;
+    esac
+    (cd "$src" && zip -qr "$OLDPWD/.serverless/$zipname" .)
+    [ "${FAKE_ZIP_MODE:-ok}" = no-state ] ||
+      printf "{\"package\":{\"artifact\":\"%s\"}}\n" "$artifact" >.serverless/serverless-state.json
     [ "${FAKE_ZIP_MODE:-ok}" != two ] || cp .serverless/demo.zip .serverless/other.zip
     exit "${SLS_STUB_EXIT:-0}"
     ;;
@@ -399,6 +409,28 @@ package() {
   FAKE_ZIP_MODE=two package
   [ "$status" -eq 1 ]
   [[ "$output" == *"found 2"* ]]
+}
+
+@test "refuses a lone layer zip when no service package was built" {
+  FAKE_ZIP_MODE=layer-only package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"built no service package"* ]]
+  [ ! -f "${SVC}/dist/demo.zip" ]
+  [ ! -f "${STUB_LOG}/buildkite-agent.log" ]
+}
+
+@test "refuses a zip that is not the artifact recorded in the state file" {
+  FAKE_ZIP_MODE=other-artifact package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not the service package recorded"*"prebuilt.zip"* ]]
+  [ ! -f "${STUB_LOG}/buildkite-agent.log" ]
+}
+
+@test "fails without the Serverless state file" {
+  FAKE_ZIP_MODE=no-state package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"serverless-state.json not found"* ]]
+  [ ! -f "${STUB_LOG}/buildkite-agent.log" ]
 }
 
 @test "fails on serverless major version 3" {

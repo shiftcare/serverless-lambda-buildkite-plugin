@@ -5,7 +5,10 @@
 # digits; the placeholder 000000000000 is allowed), an ARN, or an access key
 # ID. To accept a reviewed false positive, add "<path>:<fixed string>" to
 # <repo>/.leak-allowlist: hits in <path> on lines containing <fixed string>
-# are ignored. Prints path:line and the kind of hit, never the matched text.
+# are ignored. The allowlist itself is scanned and never exempt, so <fixed
+# string> must be surrounding context, not the flagged value. Tracked paths
+# containing ':' fail. Prints path:line and the kind of hit, never the
+# matched text.
 # A binary file (as git classifies it) that matches any pattern fails by path
 # alone and cannot be allowlisted. That match is stricter than the text one:
 # the 000000000000 placeholder and longer digit runs also fail.
@@ -26,7 +29,7 @@ scan() {
   # LC_ALL=C: under a UTF-8 locale (macOS), git grep skips matches on lines
   # holding invalid UTF-8, which binaries and Latin-1 text contain.
   out="$(LC_ALL=C git -C "$root" grep "$@" -E -e "$id_re" -e "$arn_re" -e "$key_re" \
-    -- . ':(exclude).leak-allowlist')" || rc=$?
+    -- .)" || rc=$?
   if [ "$rc" -gt 1 ]; then
     echo "check-leaks: git grep failed (exit ${rc})" >&2
     exit 2
@@ -45,6 +48,16 @@ binary="$(LC_ALL=C comm -23 \
   <(printf '%s\n' "$text_matching" | LC_ALL=C sort) | sed '/^$/d')"
 
 failed=0
+# Hits are parsed as "path:line:content", so a path containing ':' would be
+# split in the wrong place and could match another file's allowlist entry.
+colon_paths="$(LC_ALL=C git -C "$root" ls-files -- '*:*')" ||
+  { echo "check-leaks: git ls-files failed" >&2; exit 2; }
+if [ -n "$colon_paths" ]; then
+  while IFS= read -r f; do
+    printf "%s: path contains ':' (cannot be matched to the allowlist unambiguously; rename it)\n" "$f"
+  done <<<"$colon_paths"
+  failed=1
+fi
 if [ -n "$binary" ]; then
   while IFS= read -r f; do
     printf '%s: binary file matches (binary files are not checked line by line or allowlisted)\n' "$f"
@@ -98,7 +111,10 @@ printf '%s\n' "$hits" | awk -v allow="$allowlist" '
     }
     if (kinds == "") next
 
-    for (k = 1; k <= n; k++) if (apath[k] == path && index(content, astr[k])) next
+    # The allowlist is public too: hits in it are never suppressed, so its
+    # entries must use context strings, not the flagged values.
+    if (path != ".leak-allowlist")
+      for (k = 1; k <= n; k++) if (apath[k] == path && index(content, astr[k])) next
     print path ":" lnum ":" kinds
     found = 1
   }

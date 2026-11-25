@@ -144,6 +144,17 @@ case "${#zips[@]}" in
   0) fail "no .zip found in .serverless/" ;;
   *) fail "expected one .zip in .serverless/, found ${#zips[@]} (individually packaged functions are not supported): ${zips[*]}" ;;
 esac
+# The one zip must be the service package. Serverless records its basename as
+# package.artifact in the state file, and leaves it empty when no service
+# package was built (e.g. only a layer was packaged).
+state=.serverless/serverless-state.json
+[ -f "$state" ] || fail "${state} not found; cannot confirm ${zip_path} is the service package"
+artifact="$(yq -p json '.package.artifact // ""' "$state")" ||
+  fail "cannot read package.artifact from ${state}"
+[ -n "$artifact" ] ||
+  fail "Serverless built no service package (package.artifact is empty in ${state}); ${zip_path} is not the service artifact"
+[ ".serverless/${artifact}" = "$zip_path" ] ||
+  fail "${zip_path} is not the service package recorded in ${state} (${artifact})"
 
 # Resolved config can carry secrets; none of it may ship in the code zip.
 # Also refuse our own output path, in case a previous artifact still got in.

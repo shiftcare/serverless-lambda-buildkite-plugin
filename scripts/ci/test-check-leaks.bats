@@ -101,12 +101,39 @@ put() {
   put docs.md "example ${ACCOUNT_ID}"
   put other.md "example ${ACCOUNT_ID}"
   put .leak-allowlist "# reviewed
-docs.md:example ${ACCOUNT_ID}"
+docs.md:example "
   run "$CHECK" "$REPO"
   [ "$status" -eq 1 ]
   [[ "$output" == *"other.md:1:"* ]]
   [[ "$output" != *"docs.md"* ]]
   [[ "$output" != *".leak-allowlist"* ]]
+}
+
+@test "scans the allowlist itself, and its entries cannot exempt it" {
+  put docs.md "example ${ACCOUNT_ID}"
+  put .leak-allowlist "docs.md:example ${ACCOUNT_ID}
+.leak-allowlist:docs.md"
+  run "$CHECK" "$REPO"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *".leak-allowlist:1: account-id"* ]]
+  [[ "$output" != *"docs.md:1:"* ]]
+  [[ "$output" != *"$ACCOUNT_ID"* ]]
+}
+
+@test "fails on a tracked path containing a colon, even when allowlisted" {
+  put 'a:1:b.txt' "example ${ACCOUNT_ID}"
+  put a "x"
+  put .leak-allowlist "a:example"
+  run "$CHECK" "$REPO"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"a:1:b.txt: path contains ':'"* ]]
+}
+
+@test "a colon path with no hit still fails" {
+  put 'a:b.txt' "nothing here"
+  run "$CHECK" "$REPO"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"a:b.txt: path contains ':'"* ]]
 }
 
 @test "allowlist entry with an empty string suppresses nothing" {
