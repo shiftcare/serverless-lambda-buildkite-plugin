@@ -56,7 +56,7 @@ Set these in the bootstrap step's `env`:
 | `PACKAGE_REGION` | empty | Value for `serverless package --region`. Required when `serverless.yml` has no `provider.region`: `AWS_REGION` is stripped while packaging, and Serverless v2 then resolves `${aws:region}` to `us-east-1`. |
 | `PACKAGE_QUEUE` | `tiny` | Agent queue for the package step. |
 | `PACKAGE_AWS_ACCOUNT_ID` | `000000000000` | Exported as `AWS_ACCOUNT_ID` while packaging. |
-| `PACKAGE_ENV_PASSTHROUGH` | empty | Space- or comma-separated names of other bootstrap-step variables to copy into the package step's `env`. Each must be set, match `^[A-Z][A-Z0-9_]*$`, have a single-line value, and not be reserved (`AWS_*`, `AMAZON_*`, `BUILDKITE*`, `BK_*`, `PACKAGE_*`, `PIPELINE_*`, `LD_*`, `DYLD_*`, `SERVICE`, `SECRETS_PROVIDER_MODE`, `PATH`, `HOME`, `SHELL`, `IFS`, `ENV`, `BASH_ENV`, `NODE_OPTIONS`, `TMPDIR`, `TMP`, `TEMP`). **Never list a secret**: values are written into the generated pipeline YAML and are visible in the Buildkite UI. |
+| `PACKAGE_ENV_PASSTHROUGH` | empty | Space- or comma-separated names of other bootstrap-step variables to copy into the package step's `env`. Each must be set, match `^[A-Z][A-Z0-9_]*$`, have a single-line value, and not be reserved (`AWS_*`, `AMAZON_*`, `BUILDKITE*`, `BK_*`, `PACKAGE_*`, `PIPELINE_*`, `LD_*`, `DYLD_*`, `SERVICE`, `SECRETS_PROVIDER_MODE`, `PATH`, `HOME`, `SHELL`, `IFS`, `ENV`, `BASH_ENV`, `NODE_OPTIONS`, `TMPDIR`, `TMP`, `TEMP`, `NPM_CONFIG_*`, `GLOBIGNORE`, `BASHOPTS`, `SHELLOPTS`, `CDPATH`). **Never list a secret**: values are written into the generated pipeline YAML and are visible in the Buildkite UI. |
 
 Local and test switches:
 
@@ -77,9 +77,11 @@ are needed per service before migrating:
    placeholder values and make no AWS calls.
 
 Packaging also refuses to start when the service root holds any `.env` or
-`.env.*` file, or when `serverless.yml` sets `custom.dotenv.path` or
-`custom.dotenv.basePath` (see step 3 below). No service commits such a file
-today.
+`.env.*` file, when `serverless.yml` sets `custom.dotenv.path` or
+`custom.dotenv.basePath`, or when it cannot check those options: `custom` or
+`custom.dotenv` is not a plain map (for example `${file(...)}`), uses a YAML
+merge key, or the config is not `serverless.yml`/`serverless.yaml` (see step
+3 below). No service commits such a file today.
 
 Buildkite does not pass the bootstrap step's `env` on to the steps it uploads.
 If `serverless.yml` reads other `${env:...}` values at package time, set them
@@ -111,11 +113,13 @@ into the zip. Then it:
    fails if `npm ci` installed no local Serverless, and unless it is major
    version 2. After `npm ci` and before Serverless first runs, it refuses to
    continue if any `.env` or `.env.*` file exists in the service root, or if
-   `serverless.yml` sets `custom.dotenv.path` or `custom.dotenv.basePath`.
+   `serverless.yml` sets `custom.dotenv.path` or `custom.dotenv.basePath`
+   (or hides them, as in the service contract above).
    Two loaders read these files into Serverless's own environment, which
    could hand it AWS credentials: the core loader (`useDotenv: true`) reads
    `.env.<stage>` or `.env`, and `serverless-dotenv-plugin` reads
-   `.env.<NODE_ENV, else development>` or `.env` and loads every variable,
+   `.env.<NODE_ENV, else --env, in later versions --stage, else development>`
+   or `.env` and loads every variable,
    whatever its `include` list says. The refusal applies whatever
    `useDotenv` says.
 4. Expects exactly one `.serverless/*.zip`. Individually packaged functions are

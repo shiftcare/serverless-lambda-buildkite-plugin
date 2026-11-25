@@ -16,10 +16,11 @@ trap 'rm -rf -- "$work"' EXIT
 # script's scratch dir nor the downloaded scripts may live there (a TMPDIR
 # pointing into the checkout would put both in the zip).
 root="$(pwd -P)"
+[ "$root" != / ] || fail "refusing to package from /"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 for path in "$(cd "$work" && pwd -P)" "$script_dir"; do
   case "${path}/" in
-    "${root}/"*) fail "${path} is inside the service checkout ${root}; Serverless would package it (point TMPDIR outside the checkout)" ;;
+    "${root}/"*) fail "${path} is inside the service checkout ${root}; Serverless would package it (keep TMPDIR and the downloaded scripts outside the checkout)" ;;
   esac
 done
 
@@ -71,7 +72,8 @@ npm ci --include=dev
 # Dotenv files load into Serverless's own environment at package time and
 # could hand it AWS credentials after the scrub above: the core loader
 # (useDotenv: true) reads .env.<stage> or .env, and serverless-dotenv-plugin
-# reads .env.<NODE_ENV, else "development"> or .env, loading every variable
+# reads .env.<NODE_ENV, else --env, in later versions --stage, else
+# "development"> or .env, loading every variable
 # into the process whatever its `include` list says. Refuse every .env and
 # .env.* in the service root, and the plugin options that move its file
 # elsewhere. Checked after npm ci (a lifecycle script could create one) and
@@ -83,12 +85,28 @@ for dotenv in .env .env.*; do
   fi
 done
 shopt -u nullglob
+# The option check reads literal YAML, so anything that could hide those
+# options from it is refused too: a custom or custom.dotenv that is not a
+# plain map (e.g. ${file(...)}), a YAML merge key, or a non-YAML config.
+for config in serverless.json serverless.js serverless.cjs serverless.mjs serverless.ts; do
+  [ ! -e "$config" ] ||
+    fail "${config} found; only serverless.yml is supported (its dotenv options cannot be checked)"
+done
+# shellcheck disable=SC2016  # yq expression, not shell
+# Messages are set with `. = "..."`: a bare string literal after a pipe is
+# emitted by yq even when the left side yields nothing.
+dotenv_rules='[
+  (.custom | select((tag != "!!map") and (tag != "!!null")) | . = "custom is not a plain map"),
+  (.custom | select(tag == "!!map") | keys | .[] | select(. == "<<") | . = "custom uses a merge key"),
+  (.custom | select(tag == "!!map") | .dotenv | select((tag != "!!map") and (tag != "!!null")) | . = "custom.dotenv is not a plain map"),
+  (.custom.dotenv | select(tag == "!!map") | keys | .[] | select((. == "path") or (. == "basePath") or (. == "<<")) | . = "custom.dotenv sets " + .)
+] | join("; ")'
 for config in serverless.yml serverless.yaml; do
   [ -f "$config" ] || continue
-  moved="$(yq '.custom.dotenv | select(tag == "!!map") | keys | map(select(. == "path" or . == "basePath")) | join(" ")' "$config")" ||
+  bad_dotenv="$(yq "$dotenv_rules" "$config")" ||
     fail "cannot read custom.dotenv from ${config}"
-  [ -z "$moved" ] ||
-    fail "${config} sets custom.dotenv ${moved}; package only checks the service root for dotenv files (remove the option)"
+  [ -z "$bad_dotenv" ] ||
+    fail "${config}: ${bad_dotenv}; package only checks the service root for dotenv files (remove it)"
 done
 
 # Only the lockfile-pinned, service-local Serverless: `npx --no-install` can

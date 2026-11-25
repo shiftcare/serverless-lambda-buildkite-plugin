@@ -220,9 +220,36 @@ package() {
     printf 'service: demo\ncustom:\n  dotenv:\n    %s: config/\n' "$opt" >"${SVC}/serverless.yml"
     package
     [ "$status" -eq 1 ] || { echo "accepted ${opt}"; return 1; }
-    [[ "$output" == *"serverless.yml sets custom.dotenv ${opt}"* ]]
+    [[ "$output" == *"serverless.yml: custom.dotenv sets ${opt}"* ]]
   done
   [ ! -f "${STUB_LOG}/sls.log" ]
+}
+
+@test "refuses dotenv options it cannot read: indirection, merge keys, non-YAML configs" {
+  local spec
+  # shellcheck disable=SC2016  # literal Serverless variables
+  for spec in 'custom: ${file(./c.yml)}|custom is not a plain map' \
+    'custom:\n  dotenv: ${file(./d.yml)}|custom.dotenv is not a plain map' \
+    'x: &x\n  path: y\ncustom:\n  dotenv:\n    <<: *x|custom.dotenv sets <<' \
+    'x: &x\n  dotenv: {path: y}\ncustom:\n  <<: *x|custom uses a merge key'; do
+    printf 'service: demo\n%b\n' "${spec%%|*}" >"${SVC}/serverless.yml"
+    package
+    [ "$status" -eq 1 ] || { echo "accepted ${spec}"; return 1; }
+    [[ "$output" == *"${spec#*|}"* ]] || { echo "${spec}: ${output}"; return 1; }
+  done
+  rm "${SVC}/serverless.yml"
+  echo "module.exports = {}" >"${SVC}/serverless.js"
+  package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"serverless.js found"* ]]
+  [ ! -f "${STUB_LOG}/sls.log" ]
+}
+
+@test "checks serverless.yaml too" {
+  printf 'custom:\n  dotenv:\n    path: x\n' >"${SVC}/serverless.yaml"
+  package
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"serverless.yaml: custom.dotenv sets path"* ]]
 }
 
 @test "allows serverless-dotenv-plugin include lists and CloudFormation tags" {

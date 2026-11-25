@@ -41,7 +41,7 @@ for name in ${passthrough[@]+"${passthrough[@]}"}; do
   case "$name" in
     AWS_* | AMAZON_* | BUILDKITE* | BK_* | PACKAGE_* | PIPELINE_* | LD_* | DYLD_* | \
       SERVICE | SECRETS_PROVIDER_MODE | PATH | HOME | SHELL | IFS | ENV | BASH_ENV | NODE_OPTIONS | \
-      TMPDIR | TMP | TEMP)
+      TMPDIR | TMP | TEMP | NPM_CONFIG_* | GLOBIGNORE | BASHOPTS | SHELLOPTS | CDPATH)
       fail "PACKAGE_ENV_PASSTHROUGH: ${name} is reserved"
       ;;
   esac
