@@ -142,7 +142,7 @@ shopt -u nullglob
 case "${#zips[@]}" in
   1) zip_path="${zips[0]}" ;;
   0) fail "no .zip found in .serverless/" ;;
-  *) fail "expected one .zip in .serverless/, found ${#zips[@]} (individually packaged functions are not supported): ${zips[*]}" ;;
+  *) fail "expected one .zip in .serverless/, found ${#zips[@]} (individually packaged functions, layers and events that need Serverless's custom-resources.zip are not supported): ${zips[*]}" ;;
 esac
 # The one zip must be the service package. Serverless records its basename as
 # package.artifact in the state file, and leaves it empty when no service
@@ -160,20 +160,22 @@ artifact="$(yq -p json -o yaml '.package.artifact // ""' "$state")" ||
 # like a layer zip would otherwise pass.
 sls_service="$(yq -p json -o yaml '.service.service // ""' "$state")" ||
   fail "cannot read service.service from ${state}"
-if [ -z "$sls_service" ] || [ "$artifact" != "${sls_service}.zip" ]; then
+if [ -z "$sls_service" ] || [ "$artifact" != "${sls_service}.zip" ] || [ "$artifact" = custom-resources.zip ]; then
   fail "${artifact} is not the service package Serverless builds (${sls_service:-?}.zip); a prebuilt package.artifact is not supported"
 fi
 # A name match alone does not prove Serverless built this zip: a layer or an
 # individually packaged function can produce a zip of any name, and a prebuilt
 # package.artifact is recorded the same way. Refuse every setting that makes
-# or substitutes another zip; with none of them, Serverless's own service build
-# (packageAll) is the only source of a zip in .serverless/ (it is emptied at
-# package start, and a prebuilt service artifact leaves it with no zip).
+# or substitutes another zip. .serverless/ is emptied at package start and a
+# prebuilt service artifact leaves no zip there, so the only other zip source
+# is Serverless's own custom-resources.zip (some event types), refused above
+# by name. `individually` is tested for JavaScript truthiness, as Serverless
+# reads it.
 # shellcheck disable=SC2016  # yq expression, not shell
 other_zip_rules='[
   (.service.layers // {} | select(length > 0) | . = "layers"),
-  (.package.individually // false | select(. == true) | . = "package.individually"),
-  ([.service.functions // {} | .[] | .package // {} | select((.individually == true) or ((.artifact // "") != ""))] | select(length > 0) | . = "function-level package.individually or package.artifact")
+  (.package.individually | select((. != null) and (. != false) and (. != 0) and (. != "")) | . = "package.individually"),
+  ([.service.functions // {} | .[] | .package // {} | select(((.individually != null) and (.individually != false) and (.individually != 0) and (.individually != "")) or ((.artifact // "") != ""))] | select(length > 0) | . = "function-level package.individually or package.artifact")
 ] | join(", ")'
 other_zips="$(yq -p json -o yaml "$other_zip_rules" "$state")" ||
   fail "cannot read packaging settings from ${state}"

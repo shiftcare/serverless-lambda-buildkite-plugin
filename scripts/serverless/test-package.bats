@@ -66,6 +66,7 @@ case "$1" in
       artifact-named-like-layer) zipname=layer.zip artifact=layer.zip ;;
       same-name-layer) layers="{\"demo\":{\"path\":\"layer\"}}" ;;
       individually) individually=true ;;
+      individually-string) individually="\"yes\"" ;;
       fn-artifact) functions="{\"fn\":{\"package\":{\"artifact\":\"prebuilt.zip\"}}}" ;;
       fn-individually) functions="{\"fn\":{\"package\":{\"individually\":true}}}" ;;
     esac
@@ -442,6 +443,7 @@ package() {
 @test "refuses settings that make or substitute another zip, even with a matching name" {
   local spec
   for spec in 'same-name-layer|layers' 'individually|package.individually' \
+    'individually-string|package.individually' \
     'fn-artifact|function-level' 'fn-individually|function-level'; do
     rm -rf "${SVC}/.serverless" "${SVC}/dist" "${STUB_LOG}/buildkite-agent.log"
     FAKE_ZIP_MODE="${spec%%|*}" package

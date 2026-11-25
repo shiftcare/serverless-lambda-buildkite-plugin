@@ -131,8 +131,11 @@ into the zip. Then it:
    shows layers, `package.individually`, or a function-level
    `package.individually` or `package.artifact`: those can make or substitute
    a zip under any name. Serverless empties `.serverless/` at package start,
-   and a prebuilt service `package.artifact` leaves no zip there, so the one
-   zip left can only be Serverless's own service build. Layers are
+   and a prebuilt service `package.artifact` leaves no zip there. The only
+   other zip Serverless writes is its own `custom-resources.zip` (for REST API
+   logs, EventBridge without CloudFormation, and `existing` S3 or Cognito
+   events), which the one-zip rule refuses; none of the current services uses
+   those. Layers are
    unsupported anyway: Serverless v2 calls AWS when packaging a service with
    layers (even a prebuilt one), which fails without credentials.
 5. Refuses the zip if it contains `.serverless/`, `.env` (a file, or anything
