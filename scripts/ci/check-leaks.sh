@@ -6,8 +6,9 @@
 # ID. To accept a reviewed false positive, add "<path>:<fixed string>" to
 # <repo>/.leak-allowlist: hits in <path> on lines containing <fixed string>
 # are ignored. Prints path:line and the kind of hit, never the matched text.
-# A binary file that matches any pattern fails by path alone and cannot be
-# allowlisted.
+# A binary file (as git classifies it) that matches any pattern fails by path
+# alone and cannot be allowlisted. That match is stricter than the text one:
+# the 000000000000 placeholder and longer digit runs also fail.
 # Exit: 0 clean, 1 hits found, 2 usage or git error.
 set -euo pipefail
 
@@ -22,7 +23,9 @@ id_re='[0-9]{12}'
 
 scan() {
   local out rc=0
-  out="$(git -C "$root" grep "$@" -E -e "$id_re" -e "$arn_re" -e "$key_re" \
+  # LC_ALL=C: under a UTF-8 locale (macOS), git grep skips matches on lines
+  # holding invalid UTF-8, which binaries and Latin-1 text contain.
+  out="$(LC_ALL=C git -C "$root" grep "$@" -E -e "$id_re" -e "$arn_re" -e "$key_re" \
     -- . ':(exclude).leak-allowlist')" || rc=$?
   if [ "$rc" -gt 1 ]; then
     echo "check-leaks: git grep failed (exit ${rc})" >&2

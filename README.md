@@ -206,8 +206,10 @@ Buildkite agent or pipeline is needed for this repo's own CI.
 Leak-check false positives: add `<path>:<fixed string>` to `.leak-allowlist`.
 Hits in that file on lines containing that string are then ignored. Review
 every entry, since the allowlist is public too. Binary files cannot be checked
-line by line: a tracked binary file that matches any pattern fails by path and
-cannot be allowlisted.
+line by line: a tracked file git classifies as binary fails by path when it
+matches any pattern (including the all-zeros placeholder or a longer digit
+run), and cannot be allowlisted. `.gitattributes` changes that classification,
+so review any change to it.
 
 ## Releasing
 

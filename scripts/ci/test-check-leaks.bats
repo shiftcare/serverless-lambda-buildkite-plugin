@@ -127,6 +127,27 @@ docs.md:example ${ACCOUNT_ID}"
   [[ "$output" != *"$ACCOUNT_ID"* ]]
 }
 
+@test "flags a PNG-like binary with invalid UTF-8 bytes, whatever the locale" {
+  printf '\211PNG\000 ts=%s\n' "$ACCOUNT_ID" >"${REPO}/a.png"
+  track a.png
+  LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 run "$CHECK" "$REPO"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"a.png: binary file matches"* ]]
+}
+
+@test "exits 2 when git grep fails" {
+  setup_stubs
+  REAL_GIT="$(type -P git)"
+  export REAL_GIT
+  # shellcheck disable=SC2016  # stub body expands at stub run time
+  stub git '
+for a in "$@"; do [ "$a" != grep ] || exit 128; done
+exec "$REAL_GIT" "$@"'
+  run "$CHECK" "$REPO"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"git grep failed (exit 128)"* ]]
+}
+
 @test "a binary file without a match passes" {
   printf 'x\000y\n' >"${REPO}/blob.bin"
   track blob.bin
