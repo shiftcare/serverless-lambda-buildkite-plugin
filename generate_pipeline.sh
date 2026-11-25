@@ -29,9 +29,10 @@ if [ "${PIPELINE_DRY_RUN:-}" = "1" ]; then
   exit 0
 fi
 
-# Scripts are uploaded on every attempt, retries included: by default
-# `buildkite-agent artifact download` searches only the latest attempt of a
-# retried job, so later steps would not find an earlier attempt's scripts.
+# Scripts are uploaded on every attempt, retries included. The package step
+# downloads from the job that uploaded its pipeline, retried attempts included;
+# the re-upload keeps them findable for any later step that uses the default
+# search, which covers only a job's latest attempt.
 generateArtefacts
 
 # A retried bootstrap job must not upload the pipeline again. If an earlier

@@ -172,8 +172,7 @@ infrastructure, outside this repo.
   checkout. Later steps download them into their own temp dir, so they run the
   same script version as the generator. The package step downloads from the
   exact bootstrap job that uploaded its pipeline (`--step <job id>
-  --include-retried-jobs`, agent v3.131.0 or later), so a retry of that job
-  does not hide the scripts.
+  --include-retried-jobs`), so a retry of that job does not hide the scripts.
 - Retrying the bootstrap step is safe. On a retry (`BUILDKITE_RETRY_COUNT` >
   0), if an earlier attempt already uploaded the pipeline (the build has a
   step keyed `package`), the bootstrap uploads the scripts again but not the
