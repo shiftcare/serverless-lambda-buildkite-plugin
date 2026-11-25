@@ -20,9 +20,9 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
-@test "matches a reference produced with unzip -Z1 from another zip" {
+@test "matches a reference produced with unzip -Z1, with --raw" {
   unzip -Z1 "$ZIP" >"$REF"
-  run "$CHECK" "$ZIP" "$REF"
+  run "$CHECK" --raw "$ZIP" "$REF"
   [ "$status" -eq 0 ]
 }
 

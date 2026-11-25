@@ -187,7 +187,9 @@ scripts/serverless/check-zip-contents.sh --raw dist/example-service.zip referenc
 The check ignores directory entries and `ci.build.info.txt` on both sides.
 `--raw` takes the reference as an `unzip -Z1` listing, verbatim. Without it,
 the reference is an annotated list: blank lines, `#` comments and carriage
-returns are ignored, so a real path starting with `#` would be dropped. It
+returns are ignored, so a real path starting with `#` would be dropped. A
+`--raw` reference saved with CRLF line endings will not match: keep it as
+produced by `unzip -Z1`. `--raw` must be the first argument. It
 exits 0 on a match, 1 on a difference (with a unified diff: `-` reference,
 `+` zip) and 2 on a usage or read error.
 

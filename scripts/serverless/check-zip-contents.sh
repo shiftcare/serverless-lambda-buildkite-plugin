@@ -45,22 +45,19 @@ fi
 normalise <"${work}/raw" >"${work}/zip"
 # A reference that passes -f can still be unreadable; that is a read error
 # (2), not a mismatch (1).
+# cat, not cp: the scratch copy must not inherit the reference's permissions.
 if [ "$raw" -eq 1 ]; then
-  read_ok=0
-  cp -- "$reference" "${work}/reference-raw" || read_ok=$?
+  reader=(cat --)
+  filter=(cat)
 else
-  read_ok=0
-  tr -d '\r' <"$reference" >"${work}/reference-raw" || read_ok=$?
+  reader=(tr -d '\r')
+  filter=(awk 'NF && !/^[[:space:]]*#/')
 fi
-if [ "$read_ok" -ne 0 ]; then
+if ! "${reader[@]}" <"$reference" >"${work}/reference-raw"; then
   echo "check-zip-contents: cannot read ${reference}" >&2
   exit 2
 fi
-if [ "$raw" -eq 1 ]; then
-  normalise <"${work}/reference-raw" >"${work}/reference"
-else
-  awk 'NF && !/^[[:space:]]*#/' "${work}/reference-raw" | normalise >"${work}/reference"
-fi
+"${filter[@]}" "${work}/reference-raw" | normalise >"${work}/reference"
 
 status=0
 diff -u -L reference -L zip "${work}/reference" "${work}/zip" || status=$?
