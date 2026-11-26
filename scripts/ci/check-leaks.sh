@@ -43,6 +43,15 @@ scan() {
 # Text files are checked line by line below. Binary files (which `-I` skips)
 # cannot be, so any binary file that matches a pattern fails by path and
 # cannot be allowlisted.
+# git grep --cached skips unmerged entries, so a conflicted index would scan
+# as clean. Refuse it.
+unmerged="$(git -C "$root" ls-files -u)" ||
+  { echo "check-leaks: git ls-files failed" >&2; exit 2; }
+if [ -n "$unmerged" ]; then
+  echo "check-leaks: the index has unmerged entries; resolve the merge first" >&2
+  exit 2
+fi
+
 hits="$(scan -n -I)"
 matching="$(scan -l)"
 text_matching="$(scan -l -I)"
@@ -96,7 +105,9 @@ if [ -z "$hits" ]; then
   exit 0
 fi
 
-# The allowlist comes from the same snapshot as the scanned files: the index.
+# The allowlist comes from the index, like the scanned files. (Git still takes
+# binary-vs-text attributes from the working tree's .gitattributes; in a clean
+# CI checkout that matches the commit.)
 allowlist=/dev/null
 if git -C "$root" cat-file -e :.leak-allowlist 2>/dev/null; then
   allowlist="$(mktemp)" || { echo "check-leaks: mktemp failed" >&2; exit 2; }
@@ -107,7 +118,7 @@ fi
 
 # Classify each "path:line:content" hit; awk keeps this portable (no regex
 # interval support needed).
-printf '%s\n' "$hits" | awk -v allow="$allowlist" '
+printf '%s\n' "$hits" | LC_ALL=C awk -v allow="$allowlist" '
   BEGIN {
     n = 0
     while ((getline l < allow) > 0) {

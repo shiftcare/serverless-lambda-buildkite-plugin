@@ -224,6 +224,15 @@ exec "$REAL_GIT" "$@"'
   [[ "$output" == *"docs.md:1: account-id"* ]]
 }
 
+@test "refuses an index with unmerged entries (git grep --cached would skip them)" {
+  local blob
+  blob="$(printf 'account = %s\n' "$ACCOUNT_ID" | git -C "$REPO" hash-object -w --stdin)"
+  printf '100644 %s 2\tconflicted.txt\n' "$blob" | git -C "$REPO" update-index --index-info
+  run "$CHECK" "$REPO"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unmerged entries"* ]]
+}
+
 @test "a binary file without a match passes" {
   printf 'x\000y\n' >"${REPO}/blob.bin"
   track blob.bin
