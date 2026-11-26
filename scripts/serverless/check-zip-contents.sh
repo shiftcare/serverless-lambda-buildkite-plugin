@@ -36,7 +36,8 @@ work="$(mktemp -d)" || { echo "check-zip-contents: cannot create a scratch direc
 trap 'rm -rf -- "$work"' EXIT
 
 normalise() {
-  awk '!/\/$/ && $0 != "ci.build.info.txt"' | LC_ALL=C sort -u
+  # sort, not sort -u: a duplicated entry must show up as a difference.
+  awk '!/\/$/ && $0 != "ci.build.info.txt"' | LC_ALL=C sort
 }
 
 # unzip treats wildcard characters in the archive name as a pattern (so

@@ -18,7 +18,8 @@ are marked in `scripts/serverless/generate.sh`.
 > `000000000000` is the only exception), ARNs, bucket or function names, or
 > credentials. CI runs `scripts/ci/check-leaks.sh`, which catches
 > account-ID-shaped numbers, AWS ARN prefixes and AWS access-key shapes only;
-> bucket and function names are left to review.
+> bucket and function names are left to review. It scans the Git index (the
+> blobs being committed), not the checked-out files.
 
 ## Service repo setup
 
@@ -197,6 +198,7 @@ scripts/serverless/check-zip-contents.sh --raw dist/example-service.zip referenc
 ```
 
 The check ignores directory entries and `ci.build.info.txt` on both sides.
+Duplicate entries are kept, so an entry repeated on one side is a difference.
 `--raw` takes the reference as an `unzip -Z1` listing, verbatim. Without it,
 the reference is an annotated list: blank lines, `#` comments and carriage
 returns are ignored, so a real path starting with `#` would be dropped. A

@@ -60,6 +60,14 @@ setup() {
   [[ "$output" == *"+#notes.txt"* ]]
 }
 
+@test "a duplicated entry is a difference, not collapsed" {
+  unzip -Z1 "$ZIP" >"$REF"
+  printf 'handler.js\n' >>"$REF"
+  run "$CHECK" --raw "$ZIP" "$REF"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"-handler.js"* ]]
+}
+
 @test "--raw still reports a real difference" {
   printf 'handler.js\nlib/missing.js\n' >"$REF"
   run "$CHECK" --raw "$ZIP" "$REF"

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Usage: check-leaks.sh [repo-dir]
 #
+# Scans the index (the committed or staged blobs), not the working tree.
 # Fails if a tracked file contains an AWS account-ID-shaped number (exactly 12
 # digits; the placeholder 000000000000 is allowed), an ARN, or an access key
 # ID. To accept a reviewed false positive, add "<path>:<fixed string>" to
@@ -28,7 +29,9 @@ scan() {
   local out rc=0
   # LC_ALL=C: under a UTF-8 locale (macOS), git grep skips matches on lines
   # holding invalid UTF-8, which binaries and Latin-1 text contain.
-  out="$(LC_ALL=C git -C "$root" grep "$@" -E -e "$id_re" -e "$arn_re" -e "$key_re" \
+  # --cached: scan the index (the blobs being committed), not the checked-out
+  # files, which checkout filters or line-ending conversion may have changed.
+  out="$(LC_ALL=C git -C "$root" grep --cached "$@" -E -e "$id_re" -e "$arn_re" -e "$key_re" \
     -- .)" || rc=$?
   if [ "$rc" -gt 1 ]; then
     echo "check-leaks: git grep failed (exit ${rc})" >&2
@@ -93,8 +96,14 @@ if [ -z "$hits" ]; then
   exit 0
 fi
 
-allowlist="${root}/.leak-allowlist"
-[ -f "$allowlist" ] || allowlist=/dev/null
+# The allowlist comes from the same snapshot as the scanned files: the index.
+allowlist=/dev/null
+if git -C "$root" cat-file -e :.leak-allowlist 2>/dev/null; then
+  allowlist="$(mktemp)" || { echo "check-leaks: mktemp failed" >&2; exit 2; }
+  trap 'rm -f -- "$allowlist"' EXIT
+  git -C "$root" show :.leak-allowlist >"$allowlist" ||
+    { echo "check-leaks: cannot read .leak-allowlist from the index" >&2; exit 2; }
+fi
 
 # Classify each "path:line:content" hit; awk keeps this portable (no regex
 # interval support needed).

@@ -206,6 +206,24 @@ exec "$REAL_GIT" "$@"'
   [[ "$output" != *"check-leaks: clean"* ]]
 }
 
+@test "scans the staged blob, not the checked-out file" {
+  put config.txt "account = ${ACCOUNT_ID}"
+  printf 'clean now\n' >"${REPO}/config.txt"
+  run "$CHECK" "$REPO"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"config.txt:1: account-id"* ]]
+}
+
+@test "reads the allowlist from the index, not the working tree" {
+  put docs.md "example ${ACCOUNT_ID}"
+  put .leak-allowlist "other.md:example"
+  # An unstaged allowlist edit must not exempt anything.
+  printf 'docs.md:example\n' >"${REPO}/.leak-allowlist"
+  run "$CHECK" "$REPO"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"docs.md:1: account-id"* ]]
+}
+
 @test "a binary file without a match passes" {
   printf 'x\000y\n' >"${REPO}/blob.bin"
   track blob.bin
