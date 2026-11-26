@@ -1,0 +1,10 @@
+steps:
+  - label: "Deploy @@VALUE@@"
+    key: deploy
+    plain: prefix @@VALUE@@ suffix
+    agents:
+      queue: "@@QUEUE@@"
+    env:
+      VALUE: "@@VALUE@@"
+    command: |
+      echo "@@VALUE@@"

@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install bats
+        run: sudo apt-get update && sudo apt-get install -y bats
+
+      - name: Tool versions
+        run: |
+          shellcheck --version | head -2
+          bats --version
+          yq --version
+
+      - name: shellcheck
+        run: git ls-files -z '*.sh' '*.bash' | xargs -0 shellcheck
+
+      - name: bats
+        run: bats -r scripts test
+
+      - name: Leak check
+        run: scripts/ci/check-leaks.sh
